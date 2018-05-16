@@ -85,6 +85,24 @@ func main() {
 		log.Fatalln("Cannot cast")
 		return
 	}
+
+	order = &sonm.Order{
+		OrderType:      sonm.OrderType_ASK,
+		OrderStatus:    sonm.OrderStatus_ORDER_ACTIVE,
+		AuthorID:       sonm.NewEthAddress(crypto.PubkeyToAddress(prv.PublicKey)),
+		CounterpartyID: sonm.NewEthAddress(common.HexToAddress("0x0")),
+		Duration:       3600 - 50 + (rand.Uint64() % 100),
+		Price:          price,
+		Netflags:       sonm.NetflagsToUint([3]bool{true, true, (rand.Int() % 2) == 0}),
+		IdentityLevel:  sonm.IdentityLevel_ANONYMOUS,
+		Blacklist:      "0x0",
+		Tag:            []byte("00000"),
+		Benchmarks: &sonm.Benchmarks{
+			Values: []uint64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12},
+		},
+	}
+
+
 	err = <-api.Market().CancelOrder(context.Background(), prv, ordId)
 
 	if err != nil {
