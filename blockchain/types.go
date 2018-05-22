@@ -18,6 +18,11 @@ type OrderOrError struct {
 	Err   error
 }
 
+type IDOrError struct {
+	ID  *big.Int
+	Err error
+}
+
 type Event struct {
 	Data        interface{}
 	BlockNumber uint64
