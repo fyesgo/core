@@ -5,6 +5,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/noxiouz/zapctx/ctxlog"
+	"github.com/pkg/errors"
 	pb "github.com/sonm-io/core/proto"
 	"github.com/sonm-io/core/util"
 	"golang.org/x/net/context"
@@ -70,7 +71,6 @@ func (d *dealsAPI) Status(ctx context.Context, id *pb.ID) (*pb.DealInfoReply, er
 		if err == nil {
 			return info, nil
 		}
-
 	}
 
 	return reply, nil
@@ -91,6 +91,56 @@ func (d *dealsAPI) Open(ctx context.Context, req *pb.OpenDealRequest) (*pb.Deal,
 	}
 
 	return dealOrErr.Deal, nil
+}
+
+func (d *dealsAPI) ChangeRequestsList(ctx context.Context, id *pb.BigInt) (*pb.DealChangeRequestsReply, error) {
+	return d.remotes.dwh.GetDealChangeRequests(ctx, id)
+}
+
+func (d *dealsAPI) CreateChangeRequest(ctx context.Context, req *pb.DealChangeRequest) (*pb.BigInt, error) {
+	idOrErr := <-d.remotes.eth.Market().CreateChangeRequest(ctx, d.remotes.key, req)
+	if idOrErr.Err != nil {
+		return nil, errors.WithMessage(idOrErr.Err, "cannot approve change request")
+	}
+
+	return pb.NewBigInt(idOrErr.ID), nil
+}
+
+func (d *dealsAPI) ApproveChangeRequest(ctx context.Context, id *pb.BigInt) (*pb.Empty, error) {
+	req, err := d.remotes.eth.Market().GetDealChangeRequestInfo(ctx, id.Unwrap())
+	if err != nil {
+		return nil, errors.WithMessage(err, "cannot get change request by id")
+	}
+
+	matchingRequest := &pb.DealChangeRequest{
+		DealID:      req.GetDealID(),
+		RequestType: invertOrderType(req.GetRequestType()),
+		Duration:    req.GetDuration(),
+		Price:       req.GetPrice(),
+	}
+
+	idOrErr := <-d.remotes.eth.Market().CreateChangeRequest(ctx, d.remotes.key, matchingRequest)
+	if idOrErr.Err != nil {
+		return nil, errors.WithMessage(idOrErr.Err, "cannot approve change request")
+	}
+
+	return &pb.Empty{}, nil
+}
+
+func (d *dealsAPI) CancelChangeRequest(ctx context.Context, id *pb.BigInt) (*pb.Empty, error) {
+	if err := <-d.remotes.eth.Market().CancelChangeRequest(ctx, d.remotes.key, id.Unwrap()); err != nil {
+		return nil, fmt.Errorf("could not cancel change request: %v", err)
+	}
+
+	return &pb.Empty{}, nil
+}
+
+func invertOrderType(s pb.OrderType) pb.OrderType {
+	if s == pb.OrderType_ASK {
+		return pb.OrderType_BID
+	} else {
+		return pb.OrderType_ASK
+	}
 }
 
 func newDealsAPI(opts *remoteOptions) (pb.DealManagementServer, error) {

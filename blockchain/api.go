@@ -54,8 +54,8 @@ type MarketAPI interface {
 	ConfirmWorker(ctx context.Context, key *ecdsa.PrivateKey, slave common.Address) <-chan error
 	RemoveWorker(ctx context.Context, key *ecdsa.PrivateKey, master, slave common.Address) <-chan error
 	GetMaster(ctx context.Context, slave common.Address) (common.Address, error)
-	GetDealChangeRequestInfo(ctx context.Context, dealID *big.Int) (*pb.DealChangeRequest, error)
-	CreateChangeRequest(ctx context.Context, key *ecdsa.PrivateKey, dealID, newPrice, newDuration *big.Int) <-chan IDOrError
+	GetDealChangeRequestInfo(ctx context.Context, ID *big.Int) (*pb.DealChangeRequest, error)
+	CreateChangeRequest(ctx context.Context, key *ecdsa.PrivateKey, request *pb.DealChangeRequest) <-chan IDOrError
 	CancelChangeRequest(ctx context.Context, key *ecdsa.PrivateKey, id *big.Int) <-chan error
 	GetNumBenchmarks(ctx context.Context) (uint64, error)
 }
@@ -565,9 +565,10 @@ func (api *BasicMarketAPI) GetDealChangeRequestInfo(ctx context.Context, changeR
 	}, nil
 }
 
-func (api *BasicMarketAPI) CreateChangeRequest(ctx context.Context, key *ecdsa.PrivateKey, dealID, newPrice, newDuration *big.Int) <-chan IDOrError {
+func (api *BasicMarketAPI) CreateChangeRequest(ctx context.Context, key *ecdsa.PrivateKey, req *pb.DealChangeRequest) <-chan IDOrError {
 	ch := make(chan IDOrError, 0)
-	go api.createChangeRequest(ctx, key, dealID, newPrice, newDuration, ch)
+	duration := big.NewInt(int64(req.GetDuration()))
+	go api.createChangeRequest(ctx, key, req.GetDealID().Unwrap(), req.GetPrice().Unwrap(), duration, ch)
 	return ch
 }
 
@@ -600,7 +601,7 @@ func (api *BasicMarketAPI) CancelChangeRequest(ctx context.Context, key *ecdsa.P
 	return ch
 }
 
-func (api *BasicMarketAPI) cancelChangeRequest(ctx context.Context, key *ecdsa.PrivateKey, id *big.Int, ch <-chan error) {
+func (api *BasicMarketAPI) cancelChangeRequest(ctx context.Context, key *ecdsa.PrivateKey, id *big.Int, ch chan error) {
 	opts := getTxOpts(ctx, key, defaultGasLimitForSidechain, api.gasPrice)
 	tx, err := api.marketContract.CancelChangeRequest(opts, id)
 	if err != nil {
