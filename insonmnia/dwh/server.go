@@ -396,10 +396,11 @@ func (w *DWH) watchMarketEvents() error {
 				w.processEvents(dispatcher.CertificatesCreated)
 				w.processEvents(dispatcher.OrdersOpened)
 				w.processEvents(dispatcher.DealsOpened)
-				w.processEvents(dispatcher.DealChangeRequests)
+				w.processEvents(dispatcher.DealChangeRequestsSent)
 				w.processEvents(dispatcher.Billed)
 				w.processEvents(dispatcher.Other)
 				w.processEvents(dispatcher.OrdersClosed)
+				w.processEvents(dispatcher.DealChangeRequestsUpdated)
 				w.processEvents(dispatcher.DealsClosed)
 				w.processEvents(dispatcher.ValidatorDeleted)
 
@@ -630,7 +631,7 @@ func (w *DWH) onDealChangeRequestSent(eventTS uint64, changeRequestID *big.Int) 
 
 	changeRequest.CreatedTS = &pb.Timestamp{Seconds: int64(eventTS)}
 	if err := w.storage.InsertDealChangeRequest(conn, changeRequest); err != nil {
-		return errors.Wrap(err, "failed to insertDealChangeRequest")
+		return errors.Wrapf(err, "failed to InsertDealChangeRequest (%s)", changeRequest.Id.Unwrap().String())
 	}
 
 	return err
@@ -1220,17 +1221,18 @@ func (w *DWH) processBlockBoundary(event *blockchain.Event) {
 }
 
 type eventsDispatcher struct {
-	logger              *zap.Logger
-	ValidatorCreated    []*blockchain.Event
-	ValidatorDeleted    []*blockchain.Event
-	CertificatesCreated []*blockchain.Event
-	OrdersOpened        []*blockchain.Event
-	OrdersClosed        []*blockchain.Event
-	DealsOpened         []*blockchain.Event
-	DealsClosed         []*blockchain.Event
-	DealChangeRequests  []*blockchain.Event
-	Billed              []*blockchain.Event
-	Other               []*blockchain.Event
+	logger                    *zap.Logger
+	ValidatorCreated          []*blockchain.Event
+	ValidatorDeleted          []*blockchain.Event
+	CertificatesCreated       []*blockchain.Event
+	OrdersOpened              []*blockchain.Event
+	OrdersClosed              []*blockchain.Event
+	DealsOpened               []*blockchain.Event
+	DealsClosed               []*blockchain.Event
+	DealChangeRequestsSent    []*blockchain.Event
+	DealChangeRequestsUpdated []*blockchain.Event
+	Billed                    []*blockchain.Event
+	Other                     []*blockchain.Event
 }
 
 func newEventDispatcher(logger *zap.Logger) *eventsDispatcher {
@@ -1253,8 +1255,10 @@ func (m *eventsDispatcher) Add(event *blockchain.Event) {
 		m.OrdersOpened = append(m.OrdersOpened, event)
 	case *blockchain.OrderUpdatedData:
 		m.OrdersClosed = append(m.OrdersClosed, event)
-	case *blockchain.DealChangeRequestSentData, *blockchain.DealChangeRequestUpdatedData:
-		m.DealChangeRequests = append(m.DealChangeRequests, event)
+	case *blockchain.DealChangeRequestSentData:
+		m.DealChangeRequestsSent = append(m.DealChangeRequestsSent, event)
+	case *blockchain.DealChangeRequestUpdatedData:
+		m.DealChangeRequestsUpdated = append(m.DealChangeRequestsUpdated, event)
 	case *blockchain.BilledData:
 		m.Billed = append(m.Billed, event)
 	case *blockchain.ErrorData:
