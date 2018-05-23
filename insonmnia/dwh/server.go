@@ -375,43 +375,49 @@ func (w *DWH) watchMarketEvents() error {
 	var (
 		eventsCount int
 		dispatcher  = newEventDispatcher(w.logger)
+		tk          = time.NewTicker(time.Millisecond * 500)
 	)
+	defer tk.Stop()
+
 	for {
 		select {
 		case <-w.ctx.Done():
 			w.logger.Info("context cancelled (watchMarketEvents)")
 			return nil
+		case <-tk.C:
+			w.processEvents(dispatcher)
+			eventsCount, dispatcher = 0, newEventDispatcher(w.logger)
 		case event, ok := <-events:
 			if !ok {
 				return errors.New("events channel closed")
 			}
-
 			w.processBlockBoundary(event)
 			dispatcher.Add(event)
-
 			if eventsCount < 64 {
 				eventsCount++
 			} else {
-				w.processEvents(dispatcher.ValidatorCreated)
-				w.processEvents(dispatcher.CertificatesCreated)
-				w.processEvents(dispatcher.OrdersOpened)
-				w.processEvents(dispatcher.DealsOpened)
-				w.processEvents(dispatcher.DealChangeRequestsSent)
-				w.processEvents(dispatcher.Billed)
-				w.processEvents(dispatcher.Other)
-				w.processEvents(dispatcher.OrdersClosed)
-				w.processEvents(dispatcher.DealChangeRequestsUpdated)
-				w.processEvents(dispatcher.DealsClosed)
-				w.processEvents(dispatcher.ValidatorDeleted)
-
-				eventsCount = 0
-				dispatcher = newEventDispatcher(w.logger)
+				w.processEvents(dispatcher)
+				eventsCount, dispatcher = 0, newEventDispatcher(w.logger)
 			}
 		}
 	}
 }
 
-func (w *DWH) processEvents(events []*blockchain.Event) {
+func (w *DWH) processEvents(dispatcher *eventsDispatcher) {
+	w.processEventsGroup(dispatcher.ValidatorCreated)
+	w.processEventsGroup(dispatcher.CertificatesCreated)
+	w.processEventsGroup(dispatcher.OrdersOpened)
+	w.processEventsGroup(dispatcher.DealsOpened)
+	w.processEventsGroup(dispatcher.DealChangeRequestsSent)
+	w.processEventsGroup(dispatcher.Billed)
+	w.processEventsGroup(dispatcher.Other)
+	w.processEventsGroup(dispatcher.OrdersClosed)
+	w.processEventsGroup(dispatcher.DealChangeRequestsUpdated)
+	w.processEventsGroup(dispatcher.DealsClosed)
+	w.processEventsGroup(dispatcher.ValidatorDeleted)
+}
+
+func (w *DWH) processEventsGroup(events []*blockchain.Event) {
 	wg := &sync.WaitGroup{}
 	for _, event := range events {
 		wg.Add(1)
@@ -429,7 +435,7 @@ func (w *DWH) processEvents(events []*blockchain.Event) {
 						zap.Any("event_data", event.Data))
 					return
 				}
-				time.Sleep(time.Millisecond * 100)
+				time.Sleep(time.Millisecond * 10)
 			}
 		}(wg, event)
 	}
@@ -471,24 +477,6 @@ func (w *DWH) processEvent(event *blockchain.Event) error {
 	}
 
 	return nil
-}
-
-func (w *DWH) retryEvent(event *blockchain.Event) {
-	timer := time.NewTimer(eventRetryTime)
-	select {
-	case <-w.ctx.Done():
-		w.logger.Info("context cancelled while retrying event",
-			zap.Uint64("block_number", event.BlockNumber),
-			zap.String("event_type", reflect.TypeOf(event.Data).String()))
-		return
-	case <-timer.C:
-		if err := w.processEvent(event); err != nil {
-			w.logger.Warn("failed to retry processEvent", util.LaconicError(err),
-				zap.Uint64("block_number", event.BlockNumber),
-				zap.String("event_type", reflect.TypeOf(event.Data).String()),
-				zap.Any("event_data", event.Data))
-		}
-	}
 }
 
 func (w *DWH) onDealOpened(dealID *big.Int) error {
