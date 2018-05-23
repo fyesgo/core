@@ -379,6 +379,8 @@ func (w *DWH) watchMarketEvents() error {
 	)
 	defer tk.Stop()
 
+	// Store events by their type, run events of each type in parallel after a timeout
+	// or after a certain number of events is accumulated.
 	for {
 		select {
 		case <-w.ctx.Done():
@@ -393,7 +395,7 @@ func (w *DWH) watchMarketEvents() error {
 			}
 			w.processBlockBoundary(event)
 			dispatcher.Add(event)
-			if eventsCount < 64 {
+			if eventsCount < w.cfg.NumWorkers {
 				eventsCount++
 			} else {
 				w.processEvents(dispatcher)
