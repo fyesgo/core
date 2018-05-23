@@ -98,6 +98,19 @@ func (d *dealsAPI) ChangeRequestsList(ctx context.Context, id *pb.BigInt) (*pb.D
 }
 
 func (d *dealsAPI) CreateChangeRequest(ctx context.Context, req *pb.DealChangeRequest) (*pb.BigInt, error) {
+	deal, err := d.remotes.eth.Market().GetDealInfo(ctx, req.GetDealID().Unwrap())
+	if err != nil {
+		return nil, err
+	}
+
+	myAddr := crypto.PubkeyToAddress(d.remotes.key.PublicKey)
+	iamSupplier := deal.GetSupplierID().Unwrap().Big().Cmp(myAddr.Big()) == 0
+	aimConsumer := deal.GetConsumerID().Unwrap().Big().Cmp(myAddr.Big()) == 0
+
+	if !(iamSupplier || aimConsumer) {
+		return nil, errors.New("deal is not related to current user")
+	}
+
 	idOrErr := <-d.remotes.eth.Market().CreateChangeRequest(ctx, d.remotes.key, req)
 	if idOrErr.Err != nil {
 		return nil, errors.WithMessage(idOrErr.Err, "cannot approve change request")
@@ -113,10 +126,9 @@ func (d *dealsAPI) ApproveChangeRequest(ctx context.Context, id *pb.BigInt) (*pb
 	}
 
 	matchingRequest := &pb.DealChangeRequest{
-		DealID:      req.GetDealID(),
-		RequestType: invertOrderType(req.GetRequestType()),
-		Duration:    req.GetDuration(),
-		Price:       req.GetPrice(),
+		DealID:   req.GetDealID(),
+		Duration: req.GetDuration(),
+		Price:    req.GetPrice(),
 	}
 
 	idOrErr := <-d.remotes.eth.Market().CreateChangeRequest(ctx, d.remotes.key, matchingRequest)

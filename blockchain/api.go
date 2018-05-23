@@ -609,7 +609,15 @@ func (api *BasicMarketAPI) cancelChangeRequest(ctx context.Context, key *ecdsa.P
 		return
 	}
 
-	if _, err := waitForTransactionResult(ctx, api.client, api.logParsePeriod, tx, market.DealChangeRequestSentTopic); err != nil {
+	rec, err := WaitTransactionReceipt(ctx, api.client, defaultBlockConfirmations, api.logParsePeriod, tx)
+	if err != nil {
+		ch <- err
+		return
+	}
+
+	// TODO(sshaman1101): I have no idea how to parse log properly for this
+	_, err = FindLogByTopic(rec, market.DealChangeRequestUpdatedTopic)
+	if err != nil {
 		ch <- err
 		return
 	}

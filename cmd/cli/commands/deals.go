@@ -2,7 +2,6 @@ package commands
 
 import (
 	"os"
-	"strings"
 	"time"
 
 	pb "github.com/sonm-io/core/proto"
@@ -175,7 +174,7 @@ var dealCloseCmd = &cobra.Command{
 }
 
 var changeRequestsRoot = &cobra.Command{
-	Use:   "change-requests",
+	Use:   "change-request",
 	Short: "Request changes for deals",
 }
 
@@ -211,8 +210,9 @@ var changeRequestListCmd = &cobra.Command{
 }
 
 var changeRequestCreateCmd = &cobra.Command{
-	Use:    "create <deal_id> <new_price> <new_duration> <type>",
-	Args:   cobra.MinimumNArgs(4),
+	Use:    "create <deal_id> <new_price> <new_duration>",
+	Short:  "Request changes for given deal",
+	Args:   cobra.MinimumNArgs(3),
 	PreRun: loadKeyStoreIfRequired,
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx, cancel := newTimeoutContext()
@@ -242,17 +242,10 @@ var changeRequestCreateCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		orderType, ok := pb.OrderType_value[strings.ToUpper(args[3])]
-		if !ok || pb.OrderType(orderType) == pb.OrderType_ANY {
-			showError(cmd, "Invalid order type", err)
-			os.Exit(1)
-		}
-
 		req := &pb.DealChangeRequest{
-			DealID:      pb.NewBigInt(id),
-			RequestType: pb.OrderType(orderType),
-			Duration:    uint64(duration.Seconds()),
-			Price:       pb.NewBigInt(price),
+			DealID:   pb.NewBigInt(id),
+			Duration: uint64(duration.Seconds()),
+			Price:    pb.NewBigInt(price),
 		}
 
 		crid, err := dealer.CreateChangeRequest(ctx, req)
@@ -261,12 +254,13 @@ var changeRequestCreateCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		cmd.Printf("Change Request ID = %v\n", crid.Unwrap().String())
+		cmd.Printf("Change request ID = %v\n", crid.Unwrap().String())
 	},
 }
 
 var changeRequestApproveCmd = &cobra.Command{
 	Use:    "approve <req_id>",
+	Short:  "Agree to change deal conditions with given change request",
 	Args:   cobra.MinimumNArgs(1),
 	PreRun: loadKeyStoreIfRequired,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -295,6 +289,7 @@ var changeRequestApproveCmd = &cobra.Command{
 
 var changeRequestCancelCmd = &cobra.Command{
 	Use:    "cancel <req_id>",
+	Short:  "Decline given change request",
 	Args:   cobra.MinimumNArgs(1),
 	PreRun: loadKeyStoreIfRequired,
 	Run: func(cmd *cobra.Command, args []string) {
