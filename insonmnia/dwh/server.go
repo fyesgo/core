@@ -392,6 +392,8 @@ func (w *DWH) watchMarketEvents() error {
 				eventsCount++
 				dispatcher.Add(event)
 			} else {
+				w.processEvents(dispatcher.ValidatorCreated)
+				w.processEvents(dispatcher.CertificatesCreated)
 				w.processEvents(dispatcher.OrdersOpened)
 				w.processEvents(dispatcher.DealsOpened)
 				w.processEvents(dispatcher.DealChangeRequests)
@@ -399,6 +401,7 @@ func (w *DWH) watchMarketEvents() error {
 				w.processEvents(dispatcher.Other)
 				w.processEvents(dispatcher.OrdersClosed)
 				w.processEvents(dispatcher.DealsClosed)
+				w.processEvents(dispatcher.ValidatorDeleted)
 
 				eventsCount = 0
 				dispatcher = newEventDispatcher(w.logger)
@@ -413,15 +416,20 @@ func (w *DWH) processEvents(events []*blockchain.Event) {
 		wg.Add(1)
 		go func(wg *sync.WaitGroup, event *blockchain.Event) {
 			defer wg.Done()
-			if err := w.processEvent(event); err != nil {
-				w.logger.Warn("failed to processEvent", util.LaconicError(err),
-					zap.Uint64("block_number", event.BlockNumber),
-					zap.String("event_type", reflect.TypeOf(event.Data).String()),
-					zap.Any("event_data", event.Data))
-				// w.retryEvent(event)
+			for {
+				if err := w.processEvent(event); err != nil {
+					w.logger.Warn("failed to processEvent", util.LaconicError(err),
+						zap.Uint64("block_number", event.BlockNumber),
+						zap.String("event_type", reflect.TypeOf(event.Data).String()),
+						zap.Any("event_data", event.Data))
+				} else {
+					w.logger.Debug("processed event", zap.Uint64("block_number", event.BlockNumber),
+						zap.String("event_type", reflect.TypeOf(event.Data).String()),
+						zap.Any("event_data", event.Data))
+					return
+				}
+				time.Sleep(time.Millisecond * 100)
 			}
-			w.logger.Debug("processed event", zap.Uint64("block_number", event.BlockNumber),
-				zap.String("event_type", reflect.TypeOf(event.Data).String()), zap.Any("event_data", event.Data))
 		}(wg, event)
 	}
 	wg.Wait()
@@ -1210,14 +1218,17 @@ func (w *DWH) processBlockBoundary(event *blockchain.Event) error {
 }
 
 type eventsDispatcher struct {
-	logger             *zap.Logger
-	OrdersOpened       []*blockchain.Event
-	OrdersClosed       []*blockchain.Event
-	DealsOpened        []*blockchain.Event
-	DealsClosed        []*blockchain.Event
-	DealChangeRequests []*blockchain.Event
-	Billed             []*blockchain.Event
-	Other              []*blockchain.Event
+	logger              *zap.Logger
+	ValidatorCreated    []*blockchain.Event
+	ValidatorDeleted    []*blockchain.Event
+	CertificatesCreated []*blockchain.Event
+	OrdersOpened        []*blockchain.Event
+	OrdersClosed        []*blockchain.Event
+	DealsOpened         []*blockchain.Event
+	DealsClosed         []*blockchain.Event
+	DealChangeRequests  []*blockchain.Event
+	Billed              []*blockchain.Event
+	Other               []*blockchain.Event
 }
 
 func newEventDispatcher(logger *zap.Logger) *eventsDispatcher {
@@ -1226,6 +1237,12 @@ func newEventDispatcher(logger *zap.Logger) *eventsDispatcher {
 
 func (m *eventsDispatcher) Add(event *blockchain.Event) {
 	switch value := event.Data.(type) {
+	case *blockchain.ValidatorCreatedData:
+		m.ValidatorCreated = append(m.ValidatorCreated, event)
+	case *blockchain.ValidatorDeletedData:
+		m.ValidatorDeleted = append(m.ValidatorDeleted, event)
+	case *blockchain.CertificateCreatedData:
+		m.CertificatesCreated = append(m.CertificatesCreated, event)
 	case *blockchain.DealOpenedData:
 		m.DealsOpened = append(m.DealsOpened, event)
 	case *blockchain.DealUpdatedData:

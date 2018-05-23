@@ -52,12 +52,12 @@ func (c *sqlStorage) CreateIndices(db *sql.DB) error {
 func (c *sqlStorage) InsertDeal(conn queryConn, deal *pb.Deal) error {
 	ask, err := c.GetOrderByID(conn, deal.AskID.Unwrap())
 	if err != nil {
-		return errors.Wrapf(err, "failed to getOrderDetails (Ask)")
+		return errors.Wrapf(err, "failed to getOrderDetails (Ask, `%s`)", deal.GetAskID().Unwrap().String())
 	}
 
 	bid, err := c.GetOrderByID(conn, deal.BidID.Unwrap())
 	if err != nil {
-		return errors.Wrapf(err, "failed to getOrderDetails (Bid)")
+		return errors.Wrapf(err, "failed to getOrderDetails (Ask, `%s`)", deal.GetBidID().Unwrap().String())
 	}
 
 	var hasActiveChangeRequests bool
