@@ -387,10 +387,10 @@ func (w *DWH) watchMarketEvents() error {
 			}
 
 			w.processBlockBoundary(event)
+			dispatcher.Add(event)
 
 			if eventsCount < 64 {
 				eventsCount++
-				dispatcher.Add(event)
 			} else {
 				w.processEvents(dispatcher.ValidatorCreated)
 				w.processEvents(dispatcher.CertificatesCreated)
@@ -1206,15 +1206,17 @@ func (w *DWH) removeStaleEntityID(id *big.Int, entity string) error {
 	return nil
 }
 
-func (w *DWH) processBlockBoundary(event *blockchain.Event) error {
+func (w *DWH) processBlockBoundary(event *blockchain.Event) {
 	if w.lastKnownBlock != event.BlockNumber {
 		w.lastKnownBlock = event.BlockNumber
-		if err := w.updateLastKnownBlock(int64(event.BlockNumber)); err != nil {
-			return errors.Wrap(err, "failed to updateLastKnownBlock")
+		for {
+			if err := w.updateLastKnownBlock(int64(event.BlockNumber)); err != nil {
+				w.logger.Warn("failed to updateLastKnownBlock", util.LaconicError(err))
+			} else {
+				return
+			}
 		}
 	}
-
-	return nil
 }
 
 type eventsDispatcher struct {
@@ -1236,7 +1238,7 @@ func newEventDispatcher(logger *zap.Logger) *eventsDispatcher {
 }
 
 func (m *eventsDispatcher) Add(event *blockchain.Event) {
-	switch value := event.Data.(type) {
+	switch data := event.Data.(type) {
 	case *blockchain.ValidatorCreatedData:
 		m.ValidatorCreated = append(m.ValidatorCreated, event)
 	case *blockchain.ValidatorDeletedData:
@@ -1256,7 +1258,7 @@ func (m *eventsDispatcher) Add(event *blockchain.Event) {
 	case *blockchain.BilledData:
 		m.Billed = append(m.Billed, event)
 	case *blockchain.ErrorData:
-		m.logger.Warn("received error from events channel", zap.Error(value.Err), zap.String("topic", value.Topic))
+		m.logger.Warn("received error from events channel", zap.Error(data.Err), zap.String("topic", data.Topic))
 	default:
 		m.Other = append(m.Other, event)
 	}
