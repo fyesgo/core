@@ -3,11 +3,9 @@ package dwh
 import (
 	"database/sql"
 	"fmt"
-	"strings"
 
 	"github.com/Masterminds/squirrel"
 	"github.com/pkg/errors"
-	pb "github.com/sonm-io/core/proto"
 )
 
 func (w *DWH) setupPostgres(db *sql.DB, numBenchmarks uint64) error {
@@ -202,7 +200,6 @@ func newPostgresStorage(tInfo *tablesInfo, numBenchmarks uint64) *sqlStorage {
 			tablesInfo:     tInfo,
 		},
 		numBenchmarks: numBenchmarks,
-		queryRunner:   newPostgresQueryRunner(tInfo),
 		tablesInfo:    tInfo,
 		formatCb:      formatCb,
 		statementBuilder: func() squirrel.StatementBuilderType {
@@ -211,94 +208,4 @@ func newPostgresStorage(tInfo *tablesInfo, numBenchmarks uint64) *sqlStorage {
 	}
 
 	return commands
-}
-
-type postgresQueryRunner struct {
-	tablesInfo *tablesInfo
-}
-
-func newPostgresQueryRunner(tInfo *tablesInfo) queryRunner {
-	return &postgresQueryRunner{tablesInfo: tInfo}
-}
-
-func (r *postgresQueryRunner) Run(conn queryConn, opts *queryOpts) (*sql.Rows, uint64, error) {
-	var columns string
-	switch opts.table {
-	case "Deals":
-		columns = strings.Join(r.tablesInfo.DealColumns, ", ")
-	case "Orders":
-		columns = strings.Join(r.tablesInfo.OrderColumns, ", ")
-	default:
-		columns = "*"
-	}
-	var (
-		query      = fmt.Sprintf("SELECT %s FROM %s %s", columns, opts.table, opts.selectAs)
-		countQuery = fmt.Sprintf("SELECT count(*) FROM %s %s", opts.table, opts.selectAs)
-		conditions []string
-		values     []interface{}
-		numFilters = 1
-	)
-	for idx, filter := range opts.filters {
-		var condition string
-		if filter.OpenBracket {
-			condition += "("
-		}
-		condition += fmt.Sprintf("%s %s $%d", filter.Field, filter.CmpOperator, numFilters)
-		if filter.CloseBracket {
-			condition += ")"
-		}
-		if idx != len(opts.filters)-1 {
-			condition += fmt.Sprintf(" %s", filter.BoolOperator)
-		}
-		conditions = append(conditions, condition)
-		values = append(values, filter.Value)
-		numFilters++
-	}
-	if len(conditions) > 0 {
-		if opts.customFilter != nil {
-			clause := strings.Replace(opts.customFilter.clause, "$", fmt.Sprintf("$%d", numFilters), 1)
-			conditions = append(conditions, clause)
-			values = append(values, opts.customFilter.values...)
-		}
-		query += " WHERE " + strings.Join(conditions, " ")
-		countQuery += " WHERE " + strings.Join(conditions, " ")
-	}
-
-	if opts.limit > MaxLimit || opts.limit == 0 {
-		opts.limit = MaxLimit
-	}
-
-	if len(opts.sortings) > 0 {
-		query += fmt.Sprintf(" ORDER BY ")
-		var sortsFlat []string
-		for _, sort := range opts.sortings {
-			sortsFlat = append(sortsFlat, fmt.Sprintf("%s %s", sort.Field, pb.SortingOrder_name[int32(sort.Order)]))
-		}
-		query += strings.Join(sortsFlat, ", ")
-	}
-
-	query += fmt.Sprintf(" LIMIT %d", opts.limit)
-	if opts.offset > 0 {
-		query += fmt.Sprintf(" OFFSET %d", opts.offset)
-	}
-	query += ";"
-	countQuery += ";"
-
-	var count uint64
-	if opts.withCount {
-		countRows, err := conn.Query(countQuery, values...)
-		if err != nil {
-			return nil, 0, errors.Wrapf(err, "count query `%s` failed", countQuery)
-		}
-		for countRows.Next() {
-			countRows.Scan(&count)
-		}
-	}
-
-	rows, err := conn.Query(query, values...)
-	if err != nil {
-		return nil, 0, errors.Wrapf(err, "query `%s` failed", query)
-	}
-
-	return rows, count, nil
 }

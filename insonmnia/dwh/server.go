@@ -1114,17 +1114,6 @@ func (w *DWH) maybeCreateIndices() (targetBlockReached bool, err error) {
 	return false, nil
 }
 
-func (w *DWH) addBenchmarksConditions(benches map[uint64]*pb.MaxMinUint64, filters *[]*filter) {
-	for benchID, condition := range benches {
-		if condition.Max > 0 {
-			*filters = append(*filters, newFilter(getBenchmarkColumn(benchID), lte, condition.Max, "AND"))
-		}
-		if condition.Min > 0 {
-			*filters = append(*filters, newFilter(getBenchmarkColumn(benchID), gte, condition.Max, "AND"))
-		}
-	}
-}
-
 func (w *DWH) getLastKnownBlock() (uint64, error) {
 	conn := newSimpleConn(w.db)
 	defer conn.Finish()

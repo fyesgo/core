@@ -37,7 +37,6 @@ type sqlStorage struct {
 	commands         *sqlCommands
 	setupCommands    *sqlSetupCommands
 	numBenchmarks    uint64
-	queryRunner      queryRunner
 	tablesInfo       *tablesInfo
 	formatCb         formatArg
 	statementBuilder func() squirrel.StatementBuilderType
@@ -896,17 +895,6 @@ func (c *sqlStorage) addBenchmarksConditionsWhere(builder squirrel.SelectBuilder
 	return builder
 }
 
-func (c *sqlStorage) addBenchmarksConditions(benches map[uint64]*pb.MaxMinUint64, filters *[]*filter) {
-	for benchID, condition := range benches {
-		if condition.Max > 0 {
-			*filters = append(*filters, newFilter(getBenchmarkColumn(benchID), lte, condition.Max, "AND"))
-		}
-		if condition.Min > 0 {
-			*filters = append(*filters, newFilter(getBenchmarkColumn(benchID), gte, condition.Max, "AND"))
-		}
-	}
-}
-
 func (c *sqlStorage) decodeDeal(rows *sql.Rows) (*pb.DWHDeal, error) {
 	var (
 		id                   = new(string)
@@ -1496,69 +1484,6 @@ func (c *sqlSetupCommands) createIndex(db *sql.DB, command, table, column string
 	return nil
 }
 
-type customFilter struct {
-	clause string
-	values []interface{}
-}
-
-type filter struct {
-	Field        string
-	CmpOperator  string
-	BoolOperator string
-	OpenBracket  bool
-	CloseBracket bool
-	Value        interface{}
-}
-
-func newFilter(field string, cmpOperator string, value interface{}, boolOperator string) *filter {
-	return &filter{
-		Field:        field,
-		CmpOperator:  cmpOperator,
-		BoolOperator: boolOperator,
-		Value:        value,
-	}
-}
-
-func newNetflagsFilter(operator pb.CmpOp, value uint64) *filter {
-	switch operator {
-	case pb.CmpOp_GTE:
-		return newFilter("Netflags", fmt.Sprintf(" | ~%d = ", value), -1, "AND")
-	case pb.CmpOp_LTE:
-		return newFilter("", fmt.Sprintf("%d | ~Netflags = ", value), -1, "AND")
-	default:
-		return newFilter("Netflags", eq, value, "AND")
-	}
-}
-
-func newNetflagsWhere(builder squirrel.SelectBuilder, operator pb.CmpOp, value uint64) squirrel.SelectBuilder {
-	switch operator {
-	case pb.CmpOp_GTE:
-		return builder.Where("Netflags | ~ ? = -1", value)
-	case pb.CmpOp_LTE:
-		return builder.Where("? | ~Netflags = -1", value)
-	default:
-		return builder.Where("Netflags = ?", value)
-	}
-}
-
-// queryRunner implements DB-specific querying using queryOpts.
-type queryRunner interface {
-	// Run must return the obtained rows, a count of all rows that can be obtained (if queryOpts.withCount
-	// is set to `true`) and an error. If queryOpts.withCount is `false`, 0 count is returned.
-	Run(tx queryConn, opts *queryOpts) (*sql.Rows, uint64, error)
-}
-
-type queryOpts struct {
-	table        string
-	filters      []*filter
-	sortings     []*pb.SortingOption
-	offset       uint64
-	limit        uint64
-	customFilter *customFilter
-	selectAs     string
-	withCount    bool
-}
-
 // formatArg is a callback that inserts an SQL placeholder into query (e.g., ? for SQLIte of $1, $2, etc.
 // for Postgres).
 type formatArg func(argID uint64, lastArg bool) string
@@ -1725,6 +1650,17 @@ func builderWithSortings(builder squirrel.SelectBuilder, sortings []*pb.SortingO
 	builder = builder.OrderBy(sortsFlat...)
 
 	return builder
+}
+
+func newNetflagsWhere(builder squirrel.SelectBuilder, operator pb.CmpOp, value uint64) squirrel.SelectBuilder {
+	switch operator {
+	case pb.CmpOp_GTE:
+		return builder.Where("Netflags | ~ ? = -1", value)
+	case pb.CmpOp_LTE:
+		return builder.Where("? | ~Netflags = -1", value)
+	default:
+		return builder.Where("Netflags = ?", value)
+	}
 }
 
 func runQuery(conn queryConn, columns string, withCount bool, query string, args ...interface{}) (*sql.Rows, uint64, error) {
