@@ -560,14 +560,18 @@ func (c *sqlStorage) GetProfiles(conn queryConn, r *pb.ProfilesRequest) ([]*pb.P
 }
 
 func (c *sqlStorage) InsertDealChangeRequest(conn queryConn, changeRequest *pb.DealChangeRequest) error {
-	_, err := conn.Exec(c.commands.insertDealChangeRequest,
-		changeRequest.Id.Unwrap().String(),
-		changeRequest.CreatedTS.Seconds,
-		changeRequest.RequestType,
-		changeRequest.Duration,
-		changeRequest.Price.PaddedString(),
-		changeRequest.Status,
-		changeRequest.DealID.Unwrap().String())
+	query, args, _ := c.builder().Insert("DealChangeRequests").
+		Columns(c.tablesInfo.DealChangeRequestColumns...).
+		Values(
+			changeRequest.Id.Unwrap().String(),
+			changeRequest.CreatedTS.Seconds,
+			changeRequest.RequestType,
+			changeRequest.Duration,
+			changeRequest.Price.PaddedString(),
+			changeRequest.Status,
+			changeRequest.DealID.Unwrap().String(),
+		).ToSql()
+	_, err := conn.Exec(query, args...)
 	return err
 }
 
@@ -1330,7 +1334,6 @@ func (c *sqlStorage) filterSortings(sortings []*pb.SortingOption, columns map[st
 }
 
 type sqlCommands struct {
-	insertDealChangeRequest    string
 	updateDealChangeRequest    string
 	deleteDealChangeRequest    string
 	selectDealChangeRequests   string

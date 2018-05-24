@@ -32,7 +32,6 @@ func newPostgresStorage(tInfo *tablesInfo, numBenchmarks uint64) *sqlStorage {
 
 	commands := &sqlStorage{
 		commands: &sqlCommands{
-			insertDealChangeRequest:    `INSERT INTO DealChangeRequests VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 			selectDealChangeRequests:   `SELECT * FROM DealChangeRequests WHERE DealID = $1 AND RequestType = $2 AND Status = $3`,
 			deleteDealChangeRequest:    `DELETE FROM DealChangeRequests WHERE Id = $1`,
 			updateDealChangeRequest:    `UPDATE DealChangeRequests SET Status = $1 WHERE Id = $2`,

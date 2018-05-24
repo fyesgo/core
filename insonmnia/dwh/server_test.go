@@ -1149,6 +1149,7 @@ func setupTestDB(w *DWH) error {
 		CreatorCertificates, Benchmark0, Benchmark1, Benchmark2, Benchmark3, Benchmark4, Benchmark5, Benchmark6,
 		Benchmark7, Benchmark8, Benchmark9, Benchmark10, Benchmark11) VALUES
 		(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	insertDealChangeRequest := `INSERT INTO DealChangeRequests VALUES ($1, $2, $3, $4, $5, $6, $7)`
 	for i := 0; i < 10; i++ {
 		_, err := w.db.Exec(
 			insertDeal,
@@ -1263,7 +1264,7 @@ func setupTestDB(w *DWH) error {
 			return err
 		}
 
-		_, err = w.db.Exec(w.storage.(*sqlStorage).commands.insertDealChangeRequest,
+		_, err = w.db.Exec(insertDealChangeRequest,
 			fmt.Sprintf("5050%d", i), 0, 0, 0, 0, 0, "40400")
 		if err != nil {
 			return err
