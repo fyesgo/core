@@ -37,10 +37,8 @@ func newSQLiteStorage(tInfo *tablesInfo, numBenchmarks uint64) *sqlStorage {
 
 	store := &sqlStorage{
 		commands: &sqlCommands{
-			insertWorker:          `INSERT INTO Workers VALUES (?, ?, ?)`,
 			updateWorker:          `UPDATE Workers SET Confirmed=? WHERE MasterID=? AND WorkerID=?`,
 			deleteWorker:          `DELETE FROM Workers WHERE MasterID=? AND WorkerID=?`,
-			insertBlacklistEntry:  `INSERT INTO Blacklists VALUES (?, ?)`,
 			selectBlacklists:      `SELECT * FROM Blacklists WHERE AdderID=?`,
 			deleteBlacklistEntry:  `DELETE FROM Blacklists WHERE AdderID=? AND AddeeID=?`,
 			insertValidator:       `INSERT INTO Validators VALUES (?, ?)`,

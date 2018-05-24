@@ -32,10 +32,8 @@ func newPostgresStorage(tInfo *tablesInfo, numBenchmarks uint64) *sqlStorage {
 
 	commands := &sqlStorage{
 		commands: &sqlCommands{
-			insertWorker:          `INSERT INTO Workers VALUES ($1, $2, $3)`,
 			updateWorker:          `UPDATE Workers SET Confirmed = $1 WHERE MasterID = $2 AND WorkerID = $3`,
 			deleteWorker:          `DELETE FROM Workers WHERE MasterID = $1 AND WorkerID = $2`,
-			insertBlacklistEntry:  `INSERT INTO Blacklists VALUES ($1, $2)`,
 			selectBlacklists:      `SELECT * FROM Blacklists WHERE AdderID = $1`,
 			deleteBlacklistEntry:  `DELETE FROM Blacklists WHERE AdderID = $1 AND AddeeID = $2`,
 			insertValidator:       `INSERT INTO Validators VALUES ($1, $2)`,

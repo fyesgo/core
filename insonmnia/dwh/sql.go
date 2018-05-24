@@ -674,7 +674,8 @@ func (c *sqlStorage) UpdateDealConditionEndTime(conn queryConn, dealConditionID,
 }
 
 func (c *sqlStorage) InsertWorker(conn queryConn, masterID, slaveID string) error {
-	_, err := conn.Exec(c.commands.insertWorker, masterID, slaveID, false)
+	query, args, err := c.builder().Insert("Workers").Values(masterID, slaveID, false).ToSql()
+	_, err = conn.Exec(query, args...)
 	return err
 }
 
@@ -689,7 +690,8 @@ func (c *sqlStorage) DeleteWorker(conn queryConn, masterID, slaveID string) erro
 }
 
 func (c *sqlStorage) InsertBlacklistEntry(conn queryConn, adderID, addeeID string) error {
-	_, err := conn.Exec(c.commands.insertBlacklistEntry, adderID, addeeID)
+	query, args, err := c.builder().Insert("Blacklists").Values(adderID, addeeID).ToSql()
+	_, err = conn.Exec(query, args...)
 	return err
 }
 
@@ -1339,10 +1341,8 @@ func (c *sqlStorage) filterSortings(sortings []*pb.SortingOption, columns map[st
 }
 
 type sqlCommands struct {
-	insertWorker          string
 	updateWorker          string
 	deleteWorker          string
-	insertBlacklistEntry  string
 	selectBlacklists      string
 	deleteBlacklistEntry  string
 	insertValidator       string
