@@ -39,7 +39,6 @@ func newSQLiteStorage(tInfo *tablesInfo, numBenchmarks uint64) *sqlStorage {
 		commands: &sqlCommands{
 			selectDealChangeRequests:   `SELECT * FROM DealChangeRequests WHERE DealID=? AND RequestType=? AND Status=?`,
 			deleteDealChangeRequest:    `DELETE FROM DealChangeRequests WHERE Id=?`,
-			updateDealChangeRequest:    `UPDATE DealChangeRequests SET Status=? WHERE Id=?`,
 			insertDealCondition:        `INSERT INTO DealConditions VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			updateDealConditionPayout:  `UPDATE DealConditions SET TotalPayout=? WHERE Id=?`,
 			updateDealConditionEndTime: `UPDATE DealConditions SET EndTime=? WHERE Id=?`,

@@ -576,7 +576,9 @@ func (c *sqlStorage) InsertDealChangeRequest(conn queryConn, changeRequest *pb.D
 }
 
 func (c *sqlStorage) UpdateDealChangeRequest(conn queryConn, changeRequest *pb.DealChangeRequest) error {
-	_, err := conn.Exec(c.commands.updateDealChangeRequest, changeRequest.Status, changeRequest.Id.Unwrap().String())
+	query, args, _ := c.builder().Update("DealChangeRequests").Set("Status", changeRequest.Status).
+		Where("Id = ?", changeRequest.Id.Unwrap().String()).ToSql()
+	_, err := conn.Exec(query, args...)
 	return err
 }
 
@@ -1334,7 +1336,6 @@ func (c *sqlStorage) filterSortings(sortings []*pb.SortingOption, columns map[st
 }
 
 type sqlCommands struct {
-	updateDealChangeRequest    string
 	deleteDealChangeRequest    string
 	selectDealChangeRequests   string
 	insertDealCondition        string
