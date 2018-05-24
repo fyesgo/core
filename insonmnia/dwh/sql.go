@@ -589,10 +589,11 @@ func (c *sqlStorage) DeleteDealChangeRequest(conn queryConn, changeRequestID *bi
 }
 
 func (c *sqlStorage) GetDealChangeRequests(conn queryConn, changeRequest *pb.DealChangeRequest) ([]*pb.DealChangeRequest, error) {
-	rows, err := conn.Query(c.commands.selectDealChangeRequests,
-		changeRequest.DealID.Unwrap().String(),
-		changeRequest.RequestType,
-		changeRequest.Status)
+	query, args, _ := c.builder().Select(c.tablesInfo.DealChangeRequestColumns...).
+		From("DealChangeRequests").Where("DealID = ?", changeRequest.DealID.Unwrap().String()).
+		Where("RequestType = ?", changeRequest.RequestType).
+		Where("Status = ?", changeRequest.Status).ToSql()
+	rows, err := conn.Query(query, args...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to selectDealChangeRequests")
 	}
@@ -1337,7 +1338,6 @@ func (c *sqlStorage) filterSortings(sortings []*pb.SortingOption, columns map[st
 }
 
 type sqlCommands struct {
-	selectDealChangeRequests   string
 	insertDealCondition        string
 	updateDealConditionPayout  string
 	updateDealConditionEndTime string
