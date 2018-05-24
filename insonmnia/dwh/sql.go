@@ -291,17 +291,14 @@ func (c *sqlStorage) InsertOrder(conn queryConn, order *pb.DWHOrder) error {
 	for benchID := uint64(0); benchID < c.numBenchmarks; benchID++ {
 		values = append(values, order.GetOrder().Benchmarks.Values[benchID])
 	}
-
-	query, args, _ := c.builder().Insert("Orders").
-		Columns(c.tablesInfo.OrderColumns...).
-		Values(values...).
-		ToSql()
+	query, args, _ := c.builder().Insert("Orders").Columns(c.tablesInfo.OrderColumns...).Values(values...).ToSql()
 	_, err := conn.Exec(query, args...)
 	return err
 }
 
 func (c *sqlStorage) UpdateOrderStatus(conn queryConn, orderID *big.Int, status pb.OrderStatus) error {
-	_, err := conn.Exec(c.commands.updateOrderStatus, status, orderID.String())
+	query, args, _ := c.builder().Update("Order").Set("Status", status).Where("Id = ?", orderID.String()).ToSql()
+	_, err := conn.Exec(query, args...)
 	return err
 }
 
@@ -1331,7 +1328,6 @@ func (c *sqlStorage) filterSortings(sortings []*pb.SortingOption, columns map[st
 }
 
 type sqlCommands struct {
-	updateOrderStatus          string
 	updateOrders               string
 	deleteOrder                string
 	insertDealChangeRequest    string
