@@ -202,7 +202,7 @@ func newPostgresStorage(tInfo *tablesInfo, numBenchmarks uint64) *sqlStorage {
 		numBenchmarks: numBenchmarks,
 		tablesInfo:    tInfo,
 		formatCb:      formatCb,
-		statementBuilder: func() squirrel.StatementBuilderType {
+		builder: func() squirrel.StatementBuilderType {
 			return squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 		},
 	}

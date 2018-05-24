@@ -34,12 +34,12 @@ var (
 )
 
 type sqlStorage struct {
-	commands         *sqlCommands
-	setupCommands    *sqlSetupCommands
-	numBenchmarks    uint64
-	tablesInfo       *tablesInfo
-	formatCb         formatArg
-	statementBuilder func() squirrel.StatementBuilderType
+	commands      *sqlCommands
+	setupCommands *sqlSetupCommands
+	numBenchmarks uint64
+	tablesInfo    *tablesInfo
+	formatCb      formatArg
+	builder       func() squirrel.StatementBuilderType
 }
 
 func (c *sqlStorage) Setup(db *sql.DB) error {
@@ -144,7 +144,7 @@ func (c *sqlStorage) GetDealByID(conn queryConn, dealID *big.Int) (*pb.DWHDeal, 
 }
 
 func (c *sqlStorage) GetDeals(conn queryConn, r *pb.DealsRequest) ([]*pb.DWHDeal, uint64, error) {
-	builder := c.statementBuilder().Select("*").From("Deals")
+	builder := c.builder().Select("*").From("Deals")
 
 	if r.Status > 0 {
 		builder = builder.Where("Status = ?", r.Status)
@@ -218,7 +218,7 @@ func (c *sqlStorage) GetDeals(conn queryConn, r *pb.DealsRequest) ([]*pb.DWHDeal
 }
 
 func (c *sqlStorage) GetDealConditions(conn queryConn, r *pb.DealConditionsRequest) ([]*pb.DealCondition, uint64, error) {
-	builder := c.statementBuilder().Select("*").From("DealConditions")
+	builder := c.builder().Select("*").From("DealConditions")
 	builder = builder.Where("DealID = ?", r.DealID.Unwrap().String())
 	if len(r.Sortings) == 0 {
 		builder = builderWithSortings(builder, []*pb.SortingOption{{Field: "Id", Order: pb.SortingOrder_Desc}})
@@ -296,7 +296,11 @@ func (c *sqlStorage) DeleteOrder(conn queryConn, orderID *big.Int) error {
 }
 
 func (c *sqlStorage) GetOrderByID(conn queryConn, orderID *big.Int) (*pb.DWHOrder, error) {
-	rows, err := conn.Query(c.commands.selectOrderByID, orderID.String())
+	query, args, _ := c.builder().Select(c.tablesInfo.OrderColumns...).
+		From("Orders").
+		Where("Id = ?", orderID.String()).
+		ToSql()
+	rows, err := conn.Query(query, args...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to selectOrderByID")
 	}
@@ -310,7 +314,7 @@ func (c *sqlStorage) GetOrderByID(conn queryConn, orderID *big.Int) (*pb.DWHOrde
 }
 
 func (c *sqlStorage) GetOrders(conn queryConn, r *pb.OrdersRequest) ([]*pb.DWHOrder, uint64, error) {
-	builder := c.statementBuilder().Select("*").From("Orders")
+	builder := c.builder().Select("*").From("Orders")
 
 	builder = builder.Where("Status = ?", pb.OrderStatus_ORDER_ACTIVE)
 	if !r.DealID.IsZero() {
@@ -382,7 +386,7 @@ func (c *sqlStorage) GetOrders(conn queryConn, r *pb.OrdersRequest) ([]*pb.DWHOr
 }
 
 func (c *sqlStorage) GetMatchingOrders(conn queryConn, r *pb.MatchingOrdersRequest) ([]*pb.DWHOrder, uint64, error) {
-	builder := c.statementBuilder().Select("*").From("Orders")
+	builder := c.builder().Select("*").From("Orders")
 
 	order, err := c.GetOrderByID(conn, r.Id.Unwrap())
 	if err != nil {
@@ -458,7 +462,7 @@ func (c *sqlStorage) GetMatchingOrders(conn queryConn, r *pb.MatchingOrdersReque
 }
 
 func (c *sqlStorage) GetProfiles(conn queryConn, r *pb.ProfilesRequest) ([]*pb.Profile, uint64, error) {
-	builder := c.statementBuilder().Select("*").From("Profiles AS p")
+	builder := c.builder().Select("*").From("Profiles AS p")
 	switch r.Role {
 	case pb.ProfileRole_Supplier:
 		builder = builder.Where("ActiveAsks >= 1")
@@ -473,7 +477,7 @@ func (c *sqlStorage) GetProfiles(conn queryConn, r *pb.ProfilesRequest) ([]*pb.P
 		builder = builder.Where("Name LIKE ?", r.Name)
 	}
 	if r.BlacklistQuery != nil && !r.BlacklistQuery.OwnerID.IsZero() {
-		ownerBuilder := c.statementBuilder().Select("AddeeID").From("Blacklists").
+		ownerBuilder := c.builder().Select("AddeeID").From("Blacklists").
 			Where("AdderID = ?", r.BlacklistQuery.OwnerID.Unwrap().Hex()).Where("AddeeID = p.UserID")
 		ownerQuery, _, _ := ownerBuilder.ToSql()
 		if r.BlacklistQuery != nil && r.BlacklistQuery.OwnerID != nil {
@@ -658,7 +662,7 @@ func (c *sqlStorage) DeleteBlacklistEntry(conn queryConn, removerID, removeeID s
 }
 
 func (c *sqlStorage) GetBlacklist(conn queryConn, r *pb.BlacklistRequest) (*pb.BlacklistReply, error) {
-	builder := c.statementBuilder().Select("*").From("Blacklists")
+	builder := c.builder().Select("*").From("Blacklists")
 
 	if !r.OwnerID.IsZero() {
 		builder = builder.Where("AdderID = ?", r.OwnerID.Unwrap().Hex())
@@ -760,7 +764,7 @@ func (c *sqlStorage) GetProfileByID(conn queryConn, userID common.Address) (*pb.
 }
 
 func (c *sqlStorage) GetValidators(conn queryConn, r *pb.ValidatorsRequest) ([]*pb.Validator, uint64, error) {
-	builder := c.statementBuilder().Select("*").From("Validators")
+	builder := c.builder().Select("*").From("Validators")
 	if r.ValidatorLevel != nil {
 		level := r.ValidatorLevel
 		builder = builder.Where(fmt.Sprintf("Level %s ?", opsTranslator[level.Operator]), level.Value)
@@ -791,7 +795,7 @@ func (c *sqlStorage) GetValidators(conn queryConn, r *pb.ValidatorsRequest) ([]*
 }
 
 func (c *sqlStorage) GetWorkers(conn queryConn, r *pb.WorkersRequest) ([]*pb.DWHWorker, uint64, error) {
-	builder := c.statementBuilder().Select("*").From("Workers")
+	builder := c.builder().Select("*").From("Workers")
 	if !r.MasterID.IsZero() {
 		builder = builder.Where("MasterID = ?", r.MasterID.Unwrap().String())
 	}
