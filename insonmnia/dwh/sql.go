@@ -303,12 +303,13 @@ func (c *sqlStorage) UpdateOrderStatus(conn queryConn, orderID *big.Int, status 
 }
 
 func (c *sqlStorage) UpdateOrders(conn queryConn, profile *pb.Profile) error {
-	_, err := conn.Exec(c.commands.updateOrders,
-		profile.IdentityLevel,
-		profile.Name,
-		profile.Country,
-		profile.Certificates,
-		profile.UserID.Unwrap().Hex())
+	query, args, _ := c.builder().Update("Orders").SetMap(map[string]interface{}{
+		"CreatorIdentityLevel": profile.IdentityLevel,
+		"CreatorName":          profile.Name,
+		"CreatorCountry":       profile.Country,
+		"CreatorCertificates":  profile.Certificates,
+	}).Where("AuthorId = ?", profile.UserID.Unwrap().Hex()).ToSql()
+	_, err := conn.Exec(query, args...)
 	return err
 }
 
@@ -1328,7 +1329,6 @@ func (c *sqlStorage) filterSortings(sortings []*pb.SortingOption, columns map[st
 }
 
 type sqlCommands struct {
-	updateOrders               string
 	deleteOrder                string
 	insertDealChangeRequest    string
 	updateDealChangeRequest    string
