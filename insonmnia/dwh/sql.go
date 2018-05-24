@@ -132,7 +132,11 @@ func (c *sqlStorage) UpdateDealsConsumer(conn queryConn, profile *pb.Profile) er
 }
 
 func (c *sqlStorage) UpdateDealPayout(conn queryConn, dealID, payout *big.Int, billTS uint64) error {
-	_, err := conn.Exec(c.commands.updateDealPayout, util.BigIntToPaddedString(payout), billTS, dealID.String())
+	query, args, _ := c.builder().Update("Deals").SetMap(map[string]interface{}{
+		"TotalPayout": util.BigIntToPaddedString(payout),
+		"LastBillTS":  billTS,
+	}).Where("Id = ?", dealID.String()).ToSql()
+	_, err := conn.Exec(query, args...)
 	return err
 }
 
