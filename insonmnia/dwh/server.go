@@ -725,11 +725,6 @@ func (w *DWH) onBilled(eventTS uint64, dealID, payedAmount *big.Int) error {
 		return errors.Wrap(err, "failed to UpdateDealConditionPayout")
 	}
 
-	err = w.storage.InsertDealPayment(conn, &pb.DealPayment{
-		DealID:      pb.NewBigInt(dealID),
-		PayedAmount: pb.NewBigInt(payedAmount),
-		PaymentTS:   &pb.Timestamp{Seconds: int64(eventTS)},
-	})
 	if err != nil {
 		return errors.Wrap(err, "insertDealPayment failed")
 	}

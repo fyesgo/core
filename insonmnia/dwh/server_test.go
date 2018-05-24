@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"math/big"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -937,18 +936,6 @@ func testBilled(commonEventTS uint64, commonID *big.Int) error {
 				"10", conditions[0].TotalPayout.Unwrap().String())
 		}
 	}
-	if dealPayments, err := getDealPayments(monitorDWH); err != nil {
-		return errors.Errorf("Failed to GetDealDetails: %s", err)
-	} else {
-		if len(dealPayments) != 1 {
-			return errors.Errorf("(Billed) Expected 1 DealPayment, got %d", len(dealPayments))
-		}
-		if !strings.HasSuffix(dealPayments[0].PaidAmount, "10") {
-			return errors.Errorf("(Billed) Expected %s, got %s (DealPayment.PaidAmount)",
-				"10", dealPayments[0].PaidAmount)
-		}
-	}
-
 	updatedDeal, err := monitorDWH.storage.GetDealByID(newSimpleConn(monitorDWH.db), commonID)
 	if err != nil {
 		return errors.Wrap(err, "GetDealByID failed")
@@ -1074,34 +1061,6 @@ func getDealChangeRequest(w *DWH, changeRequestID *pb.BigInt) (*pb.DealChangeReq
 	}
 
 	return globalDWH.storage.(*sqlStorage).decodeDealChangeRequest(rows)
-}
-
-func getDealPayments(w *DWH) ([]*dealPayment, error) {
-	rows, err := w.db.Query("SELECT * FROM DealPayments")
-	if err != nil {
-		return nil, errors.Errorf("query failed: %s", err)
-	}
-	defer rows.Close()
-
-	var out []*dealPayment
-	for rows.Next() {
-		var (
-			billedTS   uint64
-			paidAmount string
-			dealID     string
-		)
-		if err := rows.Scan(&billedTS, &paidAmount, &dealID); err != nil {
-			return nil, err
-		} else {
-			out = append(out, &dealPayment{
-				BilledTS:   billedTS,
-				PaidAmount: paidAmount,
-				DealID:     dealID,
-			})
-		}
-	}
-
-	return out, nil
 }
 
 func getCertificates(w *DWH) ([]*pb.Certificate, error) {

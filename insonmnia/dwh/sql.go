@@ -673,12 +673,6 @@ func (c *sqlStorage) UpdateDealConditionEndTime(conn queryConn, dealConditionID,
 	return err
 }
 
-func (c *sqlStorage) InsertDealPayment(conn queryConn, payment *pb.DealPayment) error {
-	_, err := conn.Exec(c.commands.insertDealPayment, payment.PaymentTS.Seconds, payment.PayedAmount.PaddedString(),
-		payment.DealID.Unwrap().String())
-	return err
-}
-
 func (c *sqlStorage) InsertWorker(conn queryConn, masterID, slaveID string) error {
 	_, err := conn.Exec(c.commands.insertWorker, masterID, slaveID, false)
 	return err
@@ -1345,7 +1339,6 @@ func (c *sqlStorage) filterSortings(sortings []*pb.SortingOption, columns map[st
 }
 
 type sqlCommands struct {
-	insertDealPayment     string
 	insertWorker          string
 	updateWorker          string
 	deleteWorker          string
@@ -1615,40 +1608,6 @@ func newTablesInfo(numBenchmarks uint64) *tablesInfo {
 	}
 
 	return out
-}
-
-func makeInsertDealQuery(format string, formatCb formatArg, numBenchmarks uint64, tInfo *tablesInfo) string {
-	dealPlaceholders := ""
-	for i := uint64(0); i < tInfo.NumDealColumns; i++ {
-		dealPlaceholders += formatCb(i, false)
-	}
-	for i := tInfo.NumDealColumns; i < tInfo.NumDealColumns+numBenchmarks; i++ {
-		if i == numBenchmarks+tInfo.NumDealColumns-1 {
-			dealPlaceholders += formatCb(i, true)
-		} else {
-			dealPlaceholders += formatCb(i, false)
-		}
-	}
-	return fmt.Sprintf(format, strings.Join(tInfo.DealColumns, ", "), dealPlaceholders)
-}
-
-func makeSelectDealByIDQuery(format string, tInfo *tablesInfo) string {
-	return fmt.Sprintf(format, strings.Join(tInfo.DealColumns, ", "))
-}
-
-func makeInsertOrderQuery(format string, formatCb formatArg, numBenchmarks uint64, tInfo *tablesInfo) string {
-	orderPlaceholders := ""
-	for i := uint64(0); i < tInfo.NumOrderColumns; i++ {
-		orderPlaceholders += formatCb(i, false)
-	}
-	for i := tInfo.NumOrderColumns; i < tInfo.NumOrderColumns+numBenchmarks; i++ {
-		if i == numBenchmarks+tInfo.NumOrderColumns-1 {
-			orderPlaceholders += formatCb(i, true)
-		} else {
-			orderPlaceholders += formatCb(i, false)
-		}
-	}
-	return fmt.Sprintf(format, strings.Join(tInfo.OrderColumns, ", "), orderPlaceholders)
 }
 
 func makeTableWithBenchmarks(format, benchmarkType string) string {
