@@ -1139,9 +1139,14 @@ func setupTestDB(w *DWH) error {
 	}
 	byteCerts, _ := json.Marshal(certs)
 
+	insertDeal := `INSERT INTO Deals(Id, SupplierID, ConsumerID, MasterID, AskID, BidID, Duration, Price, StartTime,
+		EndTime, Status, BlockedBalance, TotalPayout, LastBillTS, Netflags, AskIdentityLevel, BidIdentityLevel,
+		SupplierCertificates, ConsumerCertificates, ActiveChangeRequest, Benchmark0, Benchmark1, Benchmark2,
+		Benchmark3, Benchmark4, Benchmark5, Benchmark6, Benchmark7, Benchmark8, Benchmark9, Benchmark10, Benchmark11)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	for i := 0; i < 10; i++ {
 		_, err := w.db.Exec(
-			w.storage.(*sqlStorage).commands.insertDeal,
+			insertDeal,
 			fmt.Sprintf("4040%d", i),
 			common.HexToAddress(fmt.Sprintf("0x1%d", i)).Hex(), // Supplier
 			common.HexToAddress(fmt.Sprintf("0x2%d", i)).Hex(), // Consumer
