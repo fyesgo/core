@@ -101,21 +101,25 @@ func (c *sqlStorage) InsertDeal(conn queryConn, deal *pb.Deal) error {
 }
 
 func (c *sqlStorage) UpdateDeal(conn queryConn, deal *pb.Deal) error {
-	_, err := conn.Exec(c.commands.updateDeal,
-		deal.Duration,
-		deal.Price.PaddedString(),
-		deal.StartTime.Seconds,
-		deal.EndTime.Seconds,
-		uint64(deal.Status),
-		deal.BlockedBalance.PaddedString(),
-		deal.TotalPayout.PaddedString(),
-		deal.LastBillTS.Seconds,
-		deal.Id.Unwrap().String())
+	query, args, _ := c.builder().Update("Deals").SetMap(map[string]interface{}{
+		"Duration":       deal.Duration,
+		"Price":          deal.Price.PaddedString(),
+		"StartTime":      deal.StartTime.Seconds,
+		"EndTime":        deal.EndTime.Seconds,
+		"Status":         uint64(deal.Status),
+		"BlockedBalance": deal.BlockedBalance.PaddedString(),
+		"TotalPayout":    deal.TotalPayout.PaddedString(),
+		"LastBillTS":     deal.LastBillTS.Seconds,
+	}).Where("Id = ?", deal.Id.Unwrap().String()).ToSql()
+	_, err := conn.Exec(query, args...)
 	return err
 }
 
 func (c *sqlStorage) UpdateDealsSupplier(conn queryConn, profile *pb.Profile) error {
-	_, err := conn.Exec(c.commands.updateDealsSupplier, []byte(profile.Certificates), profile.UserID.Unwrap().Hex())
+	query, args, _ := c.builder().Update("Deals").SetMap(map[string]interface{}{
+		"SupplierCertificates": []byte(profile.Certificates),
+	}).Where("SupplierID = ?", profile.UserID.Unwrap().Hex()).ToSql()
+	_, err := conn.Exec(query, args...)
 	return err
 }
 
@@ -1311,8 +1315,6 @@ func (c *sqlStorage) filterSortings(sortings []*pb.SortingOption, columns map[st
 }
 
 type sqlCommands struct {
-	updateDeal                 string
-	updateDealsSupplier        string
 	updateDealsConsumer        string
 	updateDealPayout           string
 	deleteDeal                 string
