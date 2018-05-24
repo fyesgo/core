@@ -700,7 +700,9 @@ func (c *sqlStorage) InsertBlacklistEntry(conn queryConn, adderID, addeeID strin
 }
 
 func (c *sqlStorage) DeleteBlacklistEntry(conn queryConn, removerID, removeeID string) error {
-	_, err := conn.Exec(c.commands.deleteBlacklistEntry, removerID, removeeID)
+	query, args, err := c.builder().Delete("Blacklists").Where("AdderID = ?", removerID).
+		Where("AddeeID = ?", removeeID).ToSql()
+	_, err = conn.Exec(query, args...)
 	return err
 }
 
