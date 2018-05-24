@@ -658,19 +658,15 @@ func (c *sqlStorage) DeleteBlacklistEntry(conn queryConn, removerID, removeeID s
 	return err
 }
 
-func (c *sqlStorage) GetBlacklist(conn queryConn, request *pb.BlacklistRequest) (*pb.BlacklistReply, error) {
-	var filters []*filter
-	if !request.OwnerID.IsZero() {
-		filters = append(filters, newFilter("AdderID", eq, request.OwnerID.Unwrap().Hex(), "AND"))
+func (c *sqlStorage) GetBlacklist(conn queryConn, r *pb.BlacklistRequest) (*pb.BlacklistReply, error) {
+	builder := c.statementBuilder().Select("*").From("Blacklists")
+
+	if !r.OwnerID.IsZero() {
+		builder = builder.Where("AdderID = ?", r.OwnerID.Unwrap().Hex())
 	}
-	rows, count, err := c.queryRunner.Run(conn, &queryOpts{
-		table:     "Blacklists",
-		filters:   filters,
-		sortings:  []*pb.SortingOption{},
-		offset:    request.Offset,
-		limit:     request.Limit,
-		withCount: request.WithCount,
-	})
+	builder = builderWithSortings(builder, []*pb.SortingOption{})
+	query, args, _ := builderWithOffsetLimit(builder, r.Limit, r.Offset).ToSql()
+	rows, count, err := runQuery(conn, "*", r.WithCount, query, args...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to run query")
 	}
@@ -694,7 +690,7 @@ func (c *sqlStorage) GetBlacklist(conn queryConn, request *pb.BlacklistRequest) 
 	}
 
 	return &pb.BlacklistReply{
-		OwnerID:   request.OwnerID,
+		OwnerID:   r.OwnerID,
 		Addresses: addees,
 		Count:     count,
 	}, nil
@@ -764,20 +760,15 @@ func (c *sqlStorage) GetProfileByID(conn queryConn, userID common.Address) (*pb.
 	return c.decodeProfile(rows)
 }
 
-func (c *sqlStorage) GetValidators(conn queryConn, request *pb.ValidatorsRequest) ([]*pb.Validator, uint64, error) {
-	var filters []*filter
-	if request.ValidatorLevel != nil {
-		level := request.ValidatorLevel
-		filters = append(filters, newFilter("Level", opsTranslator[level.Operator], level.Value, "AND"))
+func (c *sqlStorage) GetValidators(conn queryConn, r *pb.ValidatorsRequest) ([]*pb.Validator, uint64, error) {
+	builder := c.statementBuilder().Select("*").From("Validators")
+	if r.ValidatorLevel != nil {
+		level := r.ValidatorLevel
+		builder = builder.Where(fmt.Sprintf("Level %s ?", opsTranslator[level.Operator]), level.Value)
 	}
-	rows, count, err := c.queryRunner.Run(conn, &queryOpts{
-		table:     "Validators",
-		filters:   filters,
-		sortings:  request.Sortings,
-		offset:    request.Offset,
-		limit:     request.Limit,
-		withCount: request.WithCount,
-	})
+	builder = builderWithSortings(builder, r.Sortings)
+	query, args, _ := builderWithOffsetLimit(builder, r.Limit, r.Offset).ToSql()
+	rows, count, err := runQuery(conn, "*", r.WithCount, query, args...)
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "failed to run query")
 	}
@@ -800,19 +791,14 @@ func (c *sqlStorage) GetValidators(conn queryConn, request *pb.ValidatorsRequest
 	return out, count, nil
 }
 
-func (c *sqlStorage) GetWorkers(conn queryConn, request *pb.WorkersRequest) ([]*pb.DWHWorker, uint64, error) {
-	var filters []*filter
-	if !request.MasterID.IsZero() {
-		filters = append(filters, newFilter("MasterID", eq, request.MasterID.Unwrap().String(), "AND"))
+func (c *sqlStorage) GetWorkers(conn queryConn, r *pb.WorkersRequest) ([]*pb.DWHWorker, uint64, error) {
+	builder := c.statementBuilder().Select("*").From("Workers")
+	if !r.MasterID.IsZero() {
+		builder = builder.Where("MasterID = ?", r.MasterID.Unwrap().String())
 	}
-	rows, count, err := c.queryRunner.Run(conn, &queryOpts{
-		table:     "Workers",
-		filters:   filters,
-		sortings:  []*pb.SortingOption{},
-		offset:    request.Offset,
-		limit:     request.Limit,
-		withCount: request.WithCount,
-	})
+	builder = builderWithSortings(builder, []*pb.SortingOption{})
+	query, args, _ := builderWithOffsetLimit(builder, r.Limit, r.Offset).ToSql()
+	rows, count, err := runQuery(conn, "*", r.WithCount, query, args...)
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "failed to run query")
 	}
