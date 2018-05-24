@@ -643,26 +643,33 @@ func (c *sqlStorage) GetDealChangeRequestsByDealID(conn queryConn, changeRequest
 }
 
 func (c *sqlStorage) InsertDealCondition(conn queryConn, condition *pb.DealCondition) error {
-	_, err := conn.Exec(c.commands.insertDealCondition,
-		condition.SupplierID.Unwrap().Hex(),
-		condition.ConsumerID.Unwrap().Hex(),
-		condition.MasterID.Unwrap().Hex(),
-		condition.Duration,
-		condition.Price.PaddedString(),
-		condition.StartTime.Seconds,
-		condition.EndTime.Seconds,
-		condition.TotalPayout.PaddedString(),
-		condition.DealID.Unwrap().String())
+	query, args, err := c.builder().Insert("DealConditions").Columns(c.tablesInfo.DealConditionColumns[1:]...).
+		Values(
+			condition.SupplierID.Unwrap().Hex(),
+			condition.ConsumerID.Unwrap().Hex(),
+			condition.MasterID.Unwrap().Hex(),
+			condition.Duration,
+			condition.Price.PaddedString(),
+			condition.StartTime.Seconds,
+			condition.EndTime.Seconds,
+			condition.TotalPayout.PaddedString(),
+			condition.DealID.Unwrap().String(),
+		).ToSql()
+	_, err = conn.Exec(query, args...)
 	return err
 }
 
 func (c *sqlStorage) UpdateDealConditionPayout(conn queryConn, dealConditionID uint64, payout *big.Int) error {
-	_, err := conn.Exec(c.commands.updateDealConditionPayout, util.BigIntToPaddedString(payout), dealConditionID)
+	query, args, err := c.builder().Update("DealConditions").Set("TotalPayout", util.BigIntToPaddedString(payout)).
+		Where("Id = ?", dealConditionID).ToSql()
+	_, err = conn.Exec(query, args...)
 	return err
 }
 
 func (c *sqlStorage) UpdateDealConditionEndTime(conn queryConn, dealConditionID, eventTS uint64) error {
-	_, err := conn.Exec(c.commands.updateDealConditionEndTime, eventTS, dealConditionID)
+	query, args, err := c.builder().Update("DealConditions").Set("EndTime", eventTS).
+		Where("Id = ?", dealConditionID).ToSql()
+	_, err = conn.Exec(query, args...)
 	return err
 }
 
@@ -1338,32 +1345,29 @@ func (c *sqlStorage) filterSortings(sortings []*pb.SortingOption, columns map[st
 }
 
 type sqlCommands struct {
-	insertDealCondition        string
-	updateDealConditionPayout  string
-	updateDealConditionEndTime string
-	insertDealPayment          string
-	insertWorker               string
-	updateWorker               string
-	deleteWorker               string
-	insertBlacklistEntry       string
-	selectBlacklists           string
-	deleteBlacklistEntry       string
-	insertValidator            string
-	updateValidator            string
-	insertCertificate          string
-	selectCertificates         string
-	insertProfileUserID        string
-	selectProfileByID          string
-	profileNotInBlacklist      string
-	profileInBlacklist         string
-	updateProfile              string
-	updateProfileStats         string
-	selectLastKnownBlock       string
-	insertLastKnownBlock       string
-	updateLastKnownBlock       string
-	storeStaleID               string
-	removeStaleID              string
-	checkStaleID               string
+	insertDealPayment     string
+	insertWorker          string
+	updateWorker          string
+	deleteWorker          string
+	insertBlacklistEntry  string
+	selectBlacklists      string
+	deleteBlacklistEntry  string
+	insertValidator       string
+	updateValidator       string
+	insertCertificate     string
+	selectCertificates    string
+	insertProfileUserID   string
+	selectProfileByID     string
+	profileNotInBlacklist string
+	profileInBlacklist    string
+	updateProfile         string
+	updateProfileStats    string
+	selectLastKnownBlock  string
+	insertLastKnownBlock  string
+	updateLastKnownBlock  string
+	storeStaleID          string
+	removeStaleID         string
+	checkStaleID          string
 }
 
 type sqlSetupCommands struct {
