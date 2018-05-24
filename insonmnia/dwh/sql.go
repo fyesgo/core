@@ -312,8 +312,8 @@ func (c *sqlStorage) GetOrderByID(conn queryConn, orderID *big.Int) (*pb.DWHOrde
 
 func (c *sqlStorage) GetOrders(conn queryConn, r *pb.OrdersRequest) ([]*pb.DWHOrder, uint64, error) {
 	builder := c.statementBuilder().Select("*").From("Orders")
-	builder = builder.Where("Status = ", pb.OrderStatus_ORDER_ACTIVE)
 
+	builder = builder.Where("Status = ?", pb.OrderStatus_ORDER_ACTIVE)
 	if !r.DealID.IsZero() {
 		builder = builder.Where("DealID = ?", r.DealID.Unwrap().String())
 	}
