@@ -144,68 +144,66 @@ func (c *sqlStorage) GetDealByID(conn queryConn, dealID *big.Int) (*pb.DWHDeal, 
 	return c.decodeDeal(rows)
 }
 
-func (c *sqlStorage) GetDeals(conn queryConn, request *pb.DealsRequest) ([]*pb.DWHDeal, uint64, error) {
-	builder := c.statementBuilder().Select(strings.Join(c.tablesInfo.DealColumns, ", ")).From("Deals")
+func (c *sqlStorage) GetDeals(conn queryConn, r *pb.DealsRequest) ([]*pb.DWHDeal, uint64, error) {
+	builder := c.statementBuilder().Select("*").From("Deals")
 
-	if request.Status > 0 {
-		builder = builder.Where("Status = ?", request.Status)
+	if r.Status > 0 {
+		builder = builder.Where("Status = ?", r.Status)
 	}
-	if !request.SupplierID.IsZero() {
-		builder = builder.Where("SupplierID = ?", request.SupplierID.Unwrap().Hex())
+	if !r.SupplierID.IsZero() {
+		builder = builder.Where("SupplierID = ?", r.SupplierID.Unwrap().Hex())
 	}
-	if !request.ConsumerID.IsZero() {
-		builder = builder.Where("ConsumerID = ?", request.ConsumerID.Unwrap().Hex())
+	if !r.ConsumerID.IsZero() {
+		builder = builder.Where("ConsumerID = ?", r.ConsumerID.Unwrap().Hex())
 	}
-	if !request.MasterID.IsZero() {
-		builder = builder.Where("MasterID = ?", request.MasterID.Unwrap().Hex())
+	if !r.MasterID.IsZero() {
+		builder = builder.Where("MasterID = ?", r.MasterID.Unwrap().Hex())
 	}
-	if !request.AskID.IsZero() {
-		builder = builder.Where("AskID = ?", request.AskID)
+	if !r.AskID.IsZero() {
+		builder = builder.Where("AskID = ?", r.AskID)
 	}
-	if !request.BidID.IsZero() {
-		builder = builder.Where("BidID = ?", request.BidID)
+	if !r.BidID.IsZero() {
+		builder = builder.Where("BidID = ?", r.BidID)
 	}
-	if request.Duration != nil {
-		if request.Duration.Max > 0 {
-			builder = builder.Where("Duration <= ?", request.Duration.Max)
+	if r.Duration != nil {
+		if r.Duration.Max > 0 {
+			builder = builder.Where("Duration <= ?", r.Duration.Max)
 		}
-		builder = builder.Where("Duration >= ?", request.Duration.Min)
+		builder = builder.Where("Duration >= ?", r.Duration.Min)
 	}
-	if request.Price != nil {
-		if request.Price.Max != nil {
-			builder = builder.Where("Price <= ?", request.Price.Max.PaddedString())
+	if r.Price != nil {
+		if r.Price.Max != nil {
+			builder = builder.Where("Price <= ?", r.Price.Max.PaddedString())
 		}
-		if request.Price.Min != nil {
-			builder = builder.Where("Price >= ?", request.Price.Min.PaddedString())
+		if r.Price.Min != nil {
+			builder = builder.Where("Price >= ?", r.Price.Min.PaddedString())
 		}
 	}
-	if request.Netflags != nil && request.Netflags.Value > 0 {
-		builder = newNetflagsWhere(builder, request.Netflags.Operator, request.Netflags.Value)
+	if r.Netflags != nil && r.Netflags.Value > 0 {
+		builder = newNetflagsWhere(builder, r.Netflags.Operator, r.Netflags.Value)
 	}
-	if request.AskIdentityLevel > 0 {
-		builder = builder.Where("AskIdentityLevel >= ?", request.AskIdentityLevel)
+	if r.AskIdentityLevel > 0 {
+		builder = builder.Where("AskIdentityLevel >= ?", r.AskIdentityLevel)
 	}
-	if request.BidIdentityLevel > 0 {
-		builder = builder.Where("BidIdentityLevel >= ?", request.BidIdentityLevel)
+	if r.BidIdentityLevel > 0 {
+		builder = builder.Where("BidIdentityLevel >= ?", r.BidIdentityLevel)
 	}
-	if request.Benchmarks != nil {
-		builder = c.addBenchmarksConditionsWhere(builder, request.Benchmarks)
+	if r.Benchmarks != nil {
+		builder = c.addBenchmarksConditionsWhere(builder, r.Benchmarks)
 	}
-	if request.Offset > 0 {
-		builder = builder.Offset(request.Offset)
+	if r.Offset > 0 {
+		builder = builder.Offset(r.Offset)
 	}
-	if request.Offset > 0 {
-		builder = builder.Offset(request.Offset)
+	if r.Offset > 0 {
+		builder = builder.Offset(r.Offset)
 	}
-	builder = builderWithOffsetLimit(builder, request.Limit, request.Offset)
-	statement, args, _ := builder.ToSql()
-	rows, err := conn.Query(statement, args...)
+
+	builder = builderWithSortings(builder, r.Sortings)
+	query, args, _ := builderWithOffsetLimit(builder, r.Limit, r.Offset).ToSql()
+	rows, count, err := runQuery(conn, strings.Join(c.tablesInfo.DealColumns, ", "), r.WithCount, query, args...)
 	if err != nil {
-		return nil, 0, errors.Wrap(err, "failed to run query")
+		return nil, 0, errors.Wrap(err, "failed to runQuery")
 	}
-	defer rows.Close()
-
-	var count uint64 = 0
 
 	var deals []*pb.DWHDeal
 	for rows.Next() {
@@ -220,21 +218,14 @@ func (c *sqlStorage) GetDeals(conn queryConn, request *pb.DealsRequest) ([]*pb.D
 	return deals, count, nil
 }
 
-func (c *sqlStorage) GetDealConditions(conn queryConn, request *pb.DealConditionsRequest) ([]*pb.DealCondition, uint64, error) {
-	var filters []*filter
-	if len(request.Sortings) < 1 {
-		request.Sortings = []*pb.SortingOption{{Field: "Id", Order: pb.SortingOrder_Desc}}
+func (c *sqlStorage) GetDealConditions(conn queryConn, r *pb.DealConditionsRequest) ([]*pb.DealCondition, uint64, error) {
+	builder := c.statementBuilder().Select("*").From("DealConditions")
+	builder = builder.Where("DealID = ?", r.DealID.Unwrap().String())
+	if len(r.Sortings) == 0 {
+		builder = builderWithSortings(builder, []*pb.SortingOption{{Field: "Id", Order: pb.SortingOrder_Desc}})
 	}
-
-	filters = append(filters, newFilter("DealID", eq, request.DealID.Unwrap().String(), "AND"))
-	rows, count, err := c.queryRunner.Run(conn, &queryOpts{
-		table:     "DealConditions",
-		filters:   filters,
-		sortings:  request.Sortings,
-		offset:    request.Offset,
-		limit:     request.Limit,
-		withCount: request.WithCount,
-	})
+	query, args, _ := builderWithOffsetLimit(builder, r.Limit, r.Offset).ToSql()
+	rows, count, err := runQuery(conn, "*", r.WithCount, query, args...)
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "failed to run query")
 	}
@@ -1754,4 +1745,38 @@ func builderWithOffsetLimit(builder squirrel.SelectBuilder, limit, offset uint64
 	}
 
 	return builder
+}
+
+func builderWithSortings(builder squirrel.SelectBuilder, sortings []*pb.SortingOption) squirrel.SelectBuilder {
+	var sortsFlat []string
+	for _, sort := range sortings {
+		sortsFlat = append(sortsFlat, fmt.Sprintf("%s %s", sort.Field, pb.SortingOrder_name[int32(sort.Order)]))
+	}
+	builder = builder.OrderBy(sortsFlat...)
+
+	return builder
+}
+
+func runQuery(conn queryConn, columns string, withCount bool, query string, args ...interface{}) (*sql.Rows, uint64, error) {
+	dataQuery := strings.Replace(query, "*", columns, 1)
+	rows, err := conn.Query(dataQuery, args...)
+	if err != nil {
+		return nil, 0, errors.Wrapf(err, "data query `%s` failed", dataQuery)
+	}
+
+	var count uint64
+	if withCount {
+		var countQuery = strings.Replace(query, "*", "count(*)", 1)
+		countRows, err := conn.Query(countQuery, args)
+		defer countRows.Close()
+
+		if err != nil {
+			return nil, 0, errors.Wrapf(err, "count query `%s` failed", countQuery)
+		}
+		for countRows.Next() {
+			countRows.Scan(&count)
+		}
+	}
+
+	return rows, count, nil
 }
