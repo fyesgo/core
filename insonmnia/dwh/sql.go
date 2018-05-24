@@ -310,61 +310,57 @@ func (c *sqlStorage) GetOrderByID(conn queryConn, orderID *big.Int) (*pb.DWHOrde
 	return c.decodeOrder(rows)
 }
 
-func (c *sqlStorage) GetOrders(conn queryConn, request *pb.OrdersRequest) ([]*pb.DWHOrder, uint64, error) {
-	var filters []*filter
-	filters = append(filters, newFilter("Status", eq, pb.OrderStatus_ORDER_ACTIVE, "AND"))
-	if !request.DealID.IsZero() {
-		filters = append(filters, newFilter("DealID", eq, request.DealID.Unwrap().String(), "AND"))
+func (c *sqlStorage) GetOrders(conn queryConn, r *pb.OrdersRequest) ([]*pb.DWHOrder, uint64, error) {
+	builder := c.statementBuilder().Select("*").From("Orders")
+	builder = builder.Where("Status = ", pb.OrderStatus_ORDER_ACTIVE)
+
+	if !r.DealID.IsZero() {
+		builder = builder.Where("DealID = ?", r.DealID.Unwrap().String())
 	}
-	if request.Type > 0 {
-		filters = append(filters, newFilter("Type", eq, request.Type, "AND"))
+	if r.Type > 0 {
+		builder = builder.Where("Type = ?", r.Type)
 	}
-	if !request.AuthorID.IsZero() {
-		filters = append(filters, newFilter("AuthorID", eq, request.AuthorID.Unwrap().Hex(), "AND"))
+	if !r.AuthorID.IsZero() {
+		builder = builder.Where("AuthorID = ?", r.AuthorID.Unwrap().Hex())
 	}
-	if !request.CounterpartyID.IsZero() {
-		filters = append(filters, newFilter("CounterpartyID", eq, request.CounterpartyID.Unwrap().Hex(), "AND"))
+	if !r.CounterpartyID.IsZero() {
+		builder = builder.Where("CounterpartyID = ?", r.CounterpartyID.Unwrap().Hex())
 	}
-	if request.Duration != nil {
-		if request.Duration.Max > 0 {
-			filters = append(filters, newFilter("Duration", lte, request.Duration.Max, "AND"))
+	if r.Duration != nil {
+		if r.Duration.Max > 0 {
+			builder = builder.Where("Duration <= ?", r.Duration.Max)
 		}
-		filters = append(filters, newFilter("Duration", gte, request.Duration.Min, "AND"))
+		builder = builder.Where("Duration >= ?", r.Duration.Min)
 	}
-	if request.Price != nil {
-		if request.Price.Max != nil {
-			filters = append(filters, newFilter("Price", lte, request.Price.Max.PaddedString(), "AND"))
+	if r.Price != nil {
+		if r.Price.Max != nil {
+			builder = builder.Where("Price <= ?", r.Price.Max.PaddedString())
 		}
-		if request.Price.Min != nil {
-			filters = append(filters, newFilter("Price", gte, request.Price.Min.PaddedString(), "AND"))
+		if r.Price.Min != nil {
+			builder = builder.Where("Price >= ?", r.Price.Min.PaddedString())
 		}
 	}
-	if request.Netflags != nil && request.Netflags.Value > 0 {
-		filters = append(filters, newNetflagsFilter(request.Netflags.Operator, request.Netflags.Value))
+	if r.Netflags != nil && r.Netflags.Value > 0 {
+		builder = newNetflagsWhere(builder, r.Netflags.Operator, r.Netflags.Value)
 	}
-	if request.CreatorIdentityLevel > 0 {
-		filters = append(filters, newFilter("CreatorIdentityLevel", gte, request.CreatorIdentityLevel, "AND"))
+	if r.CreatorIdentityLevel > 0 {
+		builder = builder.Where("CreatorIdentityLevel >= ?", r.CreatorIdentityLevel)
 	}
-	if request.CreatedTS != nil {
-		createdTS := request.CreatedTS
+	if r.CreatedTS != nil {
+		createdTS := r.CreatedTS
 		if createdTS.Max != nil && createdTS.Max.Seconds > 0 {
-			filters = append(filters, newFilter("CreatedTS", lte, createdTS.Max.Seconds, "AND"))
+			builder = builder.Where("CreatedTS <= ?", createdTS.Max.Seconds)
 		}
 		if createdTS.Min != nil && createdTS.Min.Seconds > 0 {
-			filters = append(filters, newFilter("CreatedTS", gte, createdTS.Min.Seconds, "AND"))
+			builder = builder.Where("CreatedTS >= ?", createdTS.Min.Seconds)
 		}
 	}
-	if request.Benchmarks != nil {
-		c.addBenchmarksConditions(request.Benchmarks, &filters)
+	if r.Benchmarks != nil {
+		builder = c.addBenchmarksConditionsWhere(builder, r.Benchmarks)
 	}
-	rows, count, err := c.queryRunner.Run(conn, &queryOpts{
-		table:     "Orders",
-		filters:   filters,
-		sortings:  c.filterSortings(request.Sortings, c.tablesInfo.OrderColumnsSet),
-		offset:    request.Offset,
-		limit:     request.Limit,
-		withCount: request.WithCount,
-	})
+	builder = builderWithSortings(builder, r.Sortings)
+	query, args, _ := builderWithOffsetLimit(builder, r.Limit, r.Offset).ToSql()
+	rows, count, err := runQuery(conn, strings.Join(c.tablesInfo.OrderColumns, ", "), r.WithCount, query, args...)
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "failed to run query")
 	}
