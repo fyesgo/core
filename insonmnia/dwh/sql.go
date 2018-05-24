@@ -522,7 +522,6 @@ func (c *sqlStorage) GetProfiles(conn queryConn, r *pb.ProfilesRequest) ([]*pb.P
 		for _, blacklistedAddr := range blacklistReply.Addresses {
 			blacklistedAddrs[blacklistedAddr] = true
 		}
-
 		for _, profile := range out {
 			if blacklistedAddrs[profile.UserID.Unwrap().Hex()] {
 				profile.IsBlacklisted = true
