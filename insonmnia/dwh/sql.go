@@ -1322,7 +1322,6 @@ func (c *sqlStorage) filterSortings(sortings []*pb.SortingOption, columns map[st
 }
 
 type sqlCommands struct {
-	updateDealPayout           string
 	deleteDeal                 string
 	selectDealByID             string
 	insertOrder                string
