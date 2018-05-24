@@ -324,7 +324,7 @@ func (w *DWH) GetDealChangeRequests(ctx context.Context, request *pb.BigInt) (*p
 }
 
 func (w *DWH) getDealChangeRequests(conn queryConn, request *pb.BigInt) ([]*pb.DealChangeRequest, error) {
-	return w.storage.GetDealChangeRequestsByID(conn, request.Unwrap())
+	return w.storage.GetDealChangeRequestsByDealID(conn, request.Unwrap())
 }
 
 func (w *DWH) GetWorkers(ctx context.Context, request *pb.WorkersRequest) (*pb.WorkersReply, error) {

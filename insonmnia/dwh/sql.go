@@ -62,10 +62,10 @@ func (c *sqlStorage) InsertDeal(conn queryConn, deal *pb.Deal) error {
 	}
 
 	var hasActiveChangeRequests bool
-	if _, err := c.GetDealChangeRequestsByID(conn, deal.Id.Unwrap()); err == nil {
+	if _, err := c.GetDealChangeRequestsByDealID(conn, deal.Id.Unwrap()); err == nil {
 		hasActiveChangeRequests = true
 	}
-	allColumns := []interface{}{
+	values := []interface{}{
 		deal.Id.Unwrap().String(),
 		deal.SupplierID.Unwrap().Hex(),
 		deal.ConsumerID.Unwrap().Hex(),
@@ -88,9 +88,14 @@ func (c *sqlStorage) InsertDeal(conn queryConn, deal *pb.Deal) error {
 		hasActiveChangeRequests,
 	}
 	for benchID := uint64(0); benchID < c.numBenchmarks; benchID++ {
-		allColumns = append(allColumns, deal.Benchmarks.Values[benchID])
+		values = append(values, deal.Benchmarks.Values[benchID])
 	}
-	_, err = conn.Exec(c.commands.insertDeal, allColumns...)
+
+	query, args, _ := c.builder().Insert("Deals").
+		Columns(c.tablesInfo.DealColumns...).
+		Values(values...).
+		ToSql()
+	_, err = conn.Exec(query, args...)
 
 	return err
 }
@@ -583,7 +588,7 @@ func (c *sqlStorage) GetDealChangeRequests(conn queryConn, changeRequest *pb.Dea
 	return out, nil
 }
 
-func (c *sqlStorage) GetDealChangeRequestsByID(conn queryConn, changeRequestID *big.Int) ([]*pb.DealChangeRequest, error) {
+func (c *sqlStorage) GetDealChangeRequestsByDealID(conn queryConn, changeRequestID *big.Int) ([]*pb.DealChangeRequest, error) {
 	query, args, _ := c.builder().Select(c.tablesInfo.DealChangeRequestColumns...).
 		From("DealChangeRequests").
 		Where("DealID = ?", changeRequestID.String()).
@@ -1306,48 +1311,46 @@ func (c *sqlStorage) filterSortings(sortings []*pb.SortingOption, columns map[st
 }
 
 type sqlCommands struct {
-	insertDeal                   string
-	updateDeal                   string
-	updateDealsSupplier          string
-	updateDealsConsumer          string
-	updateDealPayout             string
-	deleteDeal                   string
-	selectDealByID               string
-	insertOrder                  string
-	updateOrderStatus            string
-	updateOrders                 string
-	deleteOrder                  string
-	insertDealChangeRequest      string
-	updateDealChangeRequest      string
-	deleteDealChangeRequest      string
-	selectDealChangeRequests     string
-	selectDealChangeRequestsByID string
-	insertDealCondition          string
-	updateDealConditionPayout    string
-	updateDealConditionEndTime   string
-	insertDealPayment            string
-	insertWorker                 string
-	updateWorker                 string
-	deleteWorker                 string
-	insertBlacklistEntry         string
-	selectBlacklists             string
-	deleteBlacklistEntry         string
-	insertValidator              string
-	updateValidator              string
-	insertCertificate            string
-	selectCertificates           string
-	insertProfileUserID          string
-	selectProfileByID            string
-	profileNotInBlacklist        string
-	profileInBlacklist           string
-	updateProfile                string
-	updateProfileStats           string
-	selectLastKnownBlock         string
-	insertLastKnownBlock         string
-	updateLastKnownBlock         string
-	storeStaleID                 string
-	removeStaleID                string
-	checkStaleID                 string
+	updateDeal                 string
+	updateDealsSupplier        string
+	updateDealsConsumer        string
+	updateDealPayout           string
+	deleteDeal                 string
+	selectDealByID             string
+	insertOrder                string
+	updateOrderStatus          string
+	updateOrders               string
+	deleteOrder                string
+	insertDealChangeRequest    string
+	updateDealChangeRequest    string
+	deleteDealChangeRequest    string
+	selectDealChangeRequests   string
+	insertDealCondition        string
+	updateDealConditionPayout  string
+	updateDealConditionEndTime string
+	insertDealPayment          string
+	insertWorker               string
+	updateWorker               string
+	deleteWorker               string
+	insertBlacklistEntry       string
+	selectBlacklists           string
+	deleteBlacklistEntry       string
+	insertValidator            string
+	updateValidator            string
+	insertCertificate          string
+	selectCertificates         string
+	insertProfileUserID        string
+	selectProfileByID          string
+	profileNotInBlacklist      string
+	profileInBlacklist         string
+	updateProfile              string
+	updateProfileStats         string
+	selectLastKnownBlock       string
+	insertLastKnownBlock       string
+	updateLastKnownBlock       string
+	storeStaleID               string
+	removeStaleID              string
+	checkStaleID               string
 }
 
 type sqlSetupCommands struct {

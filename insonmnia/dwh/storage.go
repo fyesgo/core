@@ -33,7 +33,7 @@ type storage interface {
 	UpdateDealChangeRequest(conn queryConn, changeRequest *pb.DealChangeRequest) error
 	DeleteDealChangeRequest(conn queryConn, changeRequestID *big.Int) error
 	GetDealChangeRequests(conn queryConn, changeRequest *pb.DealChangeRequest) ([]*pb.DealChangeRequest, error)
-	GetDealChangeRequestsByID(conn queryConn, changeRequestID *big.Int) ([]*pb.DealChangeRequest, error)
+	GetDealChangeRequestsByDealID(conn queryConn, changeRequestID *big.Int) ([]*pb.DealChangeRequest, error)
 	InsertDealCondition(conn queryConn, condition *pb.DealCondition) error
 	UpdateDealConditionPayout(conn queryConn, dealConditionID uint64, payout *big.Int) error
 	UpdateDealConditionEndTime(conn queryConn, dealConditionID, eventTS uint64) error
