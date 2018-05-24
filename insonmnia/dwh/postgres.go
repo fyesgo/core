@@ -31,7 +31,6 @@ func newPostgresStorage(tInfo *tablesInfo, numBenchmarks uint64) *sqlStorage {
 	}
 	commands := &sqlStorage{
 		commands: &sqlCommands{
-			selectDealByID:             makeSelectDealByIDQuery(`SELECT %s FROM Deals WHERE id = $1`, tInfo),
 			deleteDeal:                 `DELETE FROM Deals WHERE Id = $1`,
 			insertOrder:                makeInsertOrderQuery(`INSERT INTO Orders(%s) VALUES (%s)`, formatCb, numBenchmarks, tInfo),
 			updateOrders:               `UPDATE Orders SET CreatorIdentityLevel = $1, CreatorName = $2, CreatorCountry = $3, CreatorCertificates = $4 WHERE AuthorID = $5`,

@@ -146,7 +146,11 @@ func (c *sqlStorage) DeleteDeal(conn queryConn, dealID *big.Int) error {
 }
 
 func (c *sqlStorage) GetDealByID(conn queryConn, dealID *big.Int) (*pb.DWHDeal, error) {
-	rows, err := conn.Query(c.commands.selectDealByID, dealID.String())
+	query, args, _ := c.builder().Select(c.tablesInfo.DealColumns...).
+		From("Deals").
+		Where("Id = ?", dealID.String()).
+		ToSql()
+	rows, err := conn.Query(query, args...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to GetDealDetails")
 	}
@@ -1323,7 +1327,6 @@ func (c *sqlStorage) filterSortings(sortings []*pb.SortingOption, columns map[st
 
 type sqlCommands struct {
 	deleteDeal                 string
-	selectDealByID             string
 	insertOrder                string
 	updateOrderStatus          string
 	updateOrders               string
