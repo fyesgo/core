@@ -124,7 +124,10 @@ func (c *sqlStorage) UpdateDealsSupplier(conn queryConn, profile *pb.Profile) er
 }
 
 func (c *sqlStorage) UpdateDealsConsumer(conn queryConn, profile *pb.Profile) error {
-	_, err := conn.Exec(c.commands.updateDealsConsumer, []byte(profile.Certificates), profile.UserID.Unwrap().Hex())
+	query, args, _ := c.builder().Update("Deals").SetMap(map[string]interface{}{
+		"ConsumerCertificates": []byte(profile.Certificates),
+	}).Where("ConsumerID = ?", profile.UserID.Unwrap().Hex()).ToSql()
+	_, err := conn.Exec(query, args...)
 	return err
 }
 
@@ -1315,7 +1318,6 @@ func (c *sqlStorage) filterSortings(sortings []*pb.SortingOption, columns map[st
 }
 
 type sqlCommands struct {
-	updateDealsConsumer        string
 	updateDealPayout           string
 	deleteDeal                 string
 	selectDealByID             string

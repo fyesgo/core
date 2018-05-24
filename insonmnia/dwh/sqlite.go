@@ -37,7 +37,6 @@ func newSQLiteStorage(tInfo *tablesInfo, numBenchmarks uint64) *sqlStorage {
 
 	store := &sqlStorage{
 		commands: &sqlCommands{
-			updateDealsConsumer:        `UPDATE Deals SET ConsumerCertificates=? WHERE ConsumerID=?`,
 			updateDealPayout:           `UPDATE Deals SET TotalPayout = ?, LastBillTS = ? WHERE Id = ?`,
 			selectDealByID:             makeSelectDealByIDQuery(`SELECT %s FROM Deals WHERE id=?`, tInfo),
 			deleteDeal:                 `DELETE FROM Deals WHERE Id=?`,
