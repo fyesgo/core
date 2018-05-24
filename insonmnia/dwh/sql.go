@@ -382,14 +382,15 @@ func (c *sqlStorage) GetOrders(conn queryConn, r *pb.OrdersRequest) ([]*pb.DWHOr
 	return orders, count, nil
 }
 
-func (c *sqlStorage) GetMatchingOrders(conn queryConn, request *pb.MatchingOrdersRequest) ([]*pb.DWHOrder, uint64, error) {
-	order, err := c.GetOrderByID(conn, request.Id.Unwrap())
+func (c *sqlStorage) GetMatchingOrders(conn queryConn, r *pb.MatchingOrdersRequest) ([]*pb.DWHOrder, uint64, error) {
+	builder := c.statementBuilder().Select("*").From("Orders")
+
+	order, err := c.GetOrderByID(conn, r.Id.Unwrap())
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "failed to GetOrderByID")
 	}
 
 	var (
-		filters      []*filter
 		orderType    pb.OrderType
 		priceOp      string
 		durationOp   string
@@ -409,41 +410,33 @@ func (c *sqlStorage) GetMatchingOrders(conn queryConn, request *pb.MatchingOrder
 		benchOp = lte
 		sortingOrder = pb.SortingOrder_Desc
 	}
-	filters = append(filters, newFilter("Type", eq, orderType, "AND"))
-	filters = append(filters, newFilter("Status", eq, pb.OrderStatus_ORDER_ACTIVE, "AND"))
-	filters = append(filters, newFilter("Price", priceOp, order.Order.Price.PaddedString(), "AND"))
+	builder = builder.Where("Type = ?", orderType)
+	builder = builder.Where("Status = ?", pb.OrderStatus_ORDER_ACTIVE)
+	builder = builder.Where(fmt.Sprintf("Price %s ?", priceOp), order.Order.Price.PaddedString())
 	if order.Order.Duration > 0 {
-		filters = append(filters, newFilter("Duration", durationOp, order.Order.Duration, "AND"))
+		builder = builder.Where(fmt.Sprintf("Duration %s ?", durationOp), order.Order.Duration)
 	} else {
-		filters = append(filters, newFilter("Duration", eq, order.Order.Duration, "AND"))
+		builder = builder.Where("Duration = ?", order.Order.Duration)
 	}
 	if !order.Order.CounterpartyID.IsZero() {
-		filters = append(filters, newFilter("AuthorID", eq, order.Order.CounterpartyID.Unwrap().Hex(), "AND"))
+		builder = builder.Where("AuthorID = ?", order.Order.CounterpartyID.Unwrap().Hex())
 	}
-	counterpartyFilter := newFilter("CounterpartyID", eq, common.Address{}.Hex(), "OR")
-	counterpartyFilter.OpenBracket = true
-	filters = append(filters, counterpartyFilter)
-	counterpartyFilter = newFilter("CounterpartyID", eq, order.Order.AuthorID.Unwrap().Hex(), "AND")
-	counterpartyFilter.CloseBracket = true
-	filters = append(filters, counterpartyFilter)
-	if order.Order.OrderType == pb.OrderType_BID {
-		filters = append(filters, newNetflagsFilter(pb.CmpOp_GTE, order.Order.Netflags))
-	} else {
-		filters = append(filters, newNetflagsFilter(pb.CmpOp_LTE, order.Order.Netflags))
-	}
-	filters = append(filters, newFilter("IdentityLevel", gte, order.Order.IdentityLevel, "AND"))
-	filters = append(filters, newFilter("CreatorIdentityLevel", lte, order.CreatorIdentityLevel, "AND"))
-	for benchID, benchValue := range order.Order.Benchmarks.Values {
-		filters = append(filters, newFilter(getBenchmarkColumn(uint64(benchID)), benchOp, benchValue, "AND"))
-	}
-	rows, count, err := c.queryRunner.Run(conn, &queryOpts{
-		table:     "Orders",
-		filters:   filters,
-		sortings:  []*pb.SortingOption{{Field: "Price", Order: sortingOrder}},
-		offset:    request.Offset,
-		limit:     request.Limit,
-		withCount: request.WithCount,
+	builder = builder.Where(squirrel.Eq{
+		"CounterpartyID": []string{common.Address{}.Hex(), order.Order.AuthorID.Unwrap().Hex()},
 	})
+	if order.Order.OrderType == pb.OrderType_BID {
+		builder = newNetflagsWhere(builder, pb.CmpOp_GTE, order.Order.Netflags)
+	} else {
+		builder = newNetflagsWhere(builder, pb.CmpOp_LTE, order.Order.Netflags)
+	}
+	builder = builder.Where("IdentityLevel >= ?", order.Order.IdentityLevel)
+	builder = builder.Where("CreatorIdentityLevel <= ?", order.CreatorIdentityLevel)
+	for benchID, benchValue := range order.Order.Benchmarks.Values {
+		builder = builder.Where(fmt.Sprintf("%s %s ?", getBenchmarkColumn(uint64(benchID)), benchOp), benchValue)
+	}
+	builder = builderWithSortings(builder, []*pb.SortingOption{{Field: "Price", Order: sortingOrder}})
+	query, args, _ := builderWithOffsetLimit(builder, r.Limit, r.Offset).ToSql()
+	rows, count, err := runQuery(conn, strings.Join(c.tablesInfo.OrderColumns, ", "), r.WithCount, query, args...)
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "failed to run Query")
 	}
@@ -1561,7 +1554,7 @@ func newNetflagsWhere(builder squirrel.SelectBuilder, operator pb.CmpOp, value u
 	case pb.CmpOp_GTE:
 		return builder.Where("Netflags | ~ ? = -1", value)
 	case pb.CmpOp_LTE:
-		return builder.Where("? | ~Netflags = -1")
+		return builder.Where("? | ~Netflags = -1", value)
 	default:
 		return builder.Where("Netflags = ?", value)
 	}
