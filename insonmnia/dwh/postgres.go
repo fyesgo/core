@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Masterminds/squirrel"
 	"github.com/pkg/errors"
 	pb "github.com/sonm-io/core/proto"
 )
@@ -204,6 +205,9 @@ func newPostgresStorage(tInfo *tablesInfo, numBenchmarks uint64) *sqlStorage {
 		queryRunner:   newPostgresQueryRunner(tInfo),
 		tablesInfo:    tInfo,
 		formatCb:      formatCb,
+		statementBuilder: func() squirrel.StatementBuilderType {
+			return squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+		},
 	}
 
 	return commands

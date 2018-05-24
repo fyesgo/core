@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"strings"
 
+	"github.com/Masterminds/squirrel"
 	"github.com/ethereum/go-ethereum/common"
 	_ "github.com/lib/pq"
 	_ "github.com/mattn/go-sqlite3"
@@ -33,12 +34,13 @@ var (
 )
 
 type sqlStorage struct {
-	commands      *sqlCommands
-	setupCommands *sqlSetupCommands
-	numBenchmarks uint64
-	queryRunner   queryRunner
-	tablesInfo    *tablesInfo
-	formatCb      formatArg
+	commands         *sqlCommands
+	setupCommands    *sqlSetupCommands
+	numBenchmarks    uint64
+	queryRunner      queryRunner
+	tablesInfo       *tablesInfo
+	formatCb         formatArg
+	statementBuilder func() squirrel.StatementBuilderType
 }
 
 func (c *sqlStorage) Setup(db *sql.DB) error {
@@ -143,63 +145,67 @@ func (c *sqlStorage) GetDealByID(conn queryConn, dealID *big.Int) (*pb.DWHDeal, 
 }
 
 func (c *sqlStorage) GetDeals(conn queryConn, request *pb.DealsRequest) ([]*pb.DWHDeal, uint64, error) {
-	var filters []*filter
+	builder := c.statementBuilder().Select(strings.Join(c.tablesInfo.DealColumns, ", ")).From("Deals")
+
 	if request.Status > 0 {
-		filters = append(filters, newFilter("Status", eq, request.Status, "AND"))
+		builder = builder.Where("Status = ?", request.Status)
 	}
 	if !request.SupplierID.IsZero() {
-		filters = append(filters, newFilter("SupplierID", eq, request.SupplierID.Unwrap().Hex(), "AND"))
+		builder = builder.Where("SupplierID = ?", request.SupplierID.Unwrap().Hex())
 	}
 	if !request.ConsumerID.IsZero() {
-		filters = append(filters, newFilter("ConsumerID", eq, request.ConsumerID.Unwrap().Hex(), "AND"))
+		builder = builder.Where("ConsumerID = ?", request.ConsumerID.Unwrap().Hex())
 	}
 	if !request.MasterID.IsZero() {
-		filters = append(filters, newFilter("MasterID", eq, request.MasterID.Unwrap().Hex(), "AND"))
+		builder = builder.Where("MasterID = ?", request.MasterID.Unwrap().Hex())
 	}
 	if !request.AskID.IsZero() {
-		filters = append(filters, newFilter("AskID", eq, request.AskID, "AND"))
+		builder = builder.Where("AskID = ?", request.AskID)
 	}
 	if !request.BidID.IsZero() {
-		filters = append(filters, newFilter("BidID", eq, request.BidID, "AND"))
+		builder = builder.Where("BidID = ?", request.BidID)
 	}
 	if request.Duration != nil {
 		if request.Duration.Max > 0 {
-			filters = append(filters, newFilter("Duration", lte, request.Duration.Max, "AND"))
+			builder = builder.Where("Duration <= ?", request.Duration.Max)
 		}
-		filters = append(filters, newFilter("Duration", gte, request.Duration.Min, "AND"))
+		builder = builder.Where("Duration >= ?", request.Duration.Min)
 	}
 	if request.Price != nil {
 		if request.Price.Max != nil {
-			filters = append(filters, newFilter("Price", lte, request.Price.Max.PaddedString(), "AND"))
+			builder = builder.Where("Price <= ?", request.Price.Max.PaddedString())
 		}
 		if request.Price.Min != nil {
-			filters = append(filters, newFilter("Price", gte, request.Price.Min.PaddedString(), "AND"))
+			builder = builder.Where("Price >= ?", request.Price.Min.PaddedString())
 		}
 	}
 	if request.Netflags != nil && request.Netflags.Value > 0 {
-		filters = append(filters, newNetflagsFilter(request.Netflags.Operator, request.Netflags.Value))
+		builder = newNetflagsWhere(builder, request.Netflags.Operator, request.Netflags.Value)
 	}
 	if request.AskIdentityLevel > 0 {
-		filters = append(filters, newFilter("AskIdentityLevel", gte, request.AskIdentityLevel, "AND"))
+		builder = builder.Where("AskIdentityLevel >= ?", request.AskIdentityLevel)
 	}
 	if request.BidIdentityLevel > 0 {
-		filters = append(filters, newFilter("BidIdentityLevel", gte, request.BidIdentityLevel, "AND"))
+		builder = builder.Where("BidIdentityLevel >= ?", request.BidIdentityLevel)
 	}
 	if request.Benchmarks != nil {
-		c.addBenchmarksConditions(request.Benchmarks, &filters)
+		builder = c.addBenchmarksConditionsWhere(builder, request.Benchmarks)
 	}
-	rows, count, err := c.queryRunner.Run(conn, &queryOpts{
-		table:     "Deals",
-		filters:   filters,
-		sortings:  c.filterSortings(request.Sortings, c.tablesInfo.DealColumnsSet),
-		offset:    request.Offset,
-		limit:     request.Limit,
-		withCount: request.WithCount,
-	})
+	if request.Offset > 0 {
+		builder = builder.Offset(request.Offset)
+	}
+	if request.Offset > 0 {
+		builder = builder.Offset(request.Offset)
+	}
+	builder = builderWithOffsetLimit(builder, request.Limit, request.Offset)
+	statement, args, _ := builder.ToSql()
+	rows, err := conn.Query(statement, args...)
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "failed to run query")
 	}
 	defer rows.Close()
+
+	var count uint64 = 0
 
 	var deals []*pb.DWHDeal
 	for rows.Next() {
@@ -916,6 +922,19 @@ func (c *sqlStorage) CheckStaleID(conn queryConn, id *big.Int, entity string) (b
 	return true, nil
 }
 
+func (c *sqlStorage) addBenchmarksConditionsWhere(builder squirrel.SelectBuilder, benches map[uint64]*pb.MaxMinUint64) squirrel.SelectBuilder {
+	for benchID, condition := range benches {
+		if condition.Max > 0 {
+			builder = builder.Where(fmt.Sprintf("%s <= ?", getBenchmarkColumn(benchID)), condition.Max)
+		}
+		if condition.Min > 0 {
+			builder = builder.Where(fmt.Sprintf("%s >= ?", getBenchmarkColumn(benchID)), condition.Min)
+		}
+	}
+
+	return builder
+}
+
 func (c *sqlStorage) addBenchmarksConditions(benches map[uint64]*pb.MaxMinUint64, filters *[]*filter) {
 	for benchID, condition := range benches {
 		if condition.Max > 0 {
@@ -1550,6 +1569,17 @@ func newNetflagsFilter(operator pb.CmpOp, value uint64) *filter {
 	}
 }
 
+func newNetflagsWhere(builder squirrel.SelectBuilder, operator pb.CmpOp, value uint64) squirrel.SelectBuilder {
+	switch operator {
+	case pb.CmpOp_GTE:
+		return builder.Where("Netflags | ~ ? = -1", value)
+	case pb.CmpOp_LTE:
+		return builder.Where("? | ~Netflags = -1")
+	default:
+		return builder.Where("Netflags = ?", value)
+	}
+}
+
 // queryRunner implements DB-specific querying using queryOpts.
 type queryRunner interface {
 	// Run must return the obtained rows, a count of all rows that can be obtained (if queryOpts.withCount
@@ -1713,4 +1743,15 @@ func makeTableWithBenchmarks(format, benchmarkType string) string {
 		benchmarkColumns[benchmarkID] = fmt.Sprintf("%s %s", getBenchmarkColumn(uint64(benchmarkID)), benchmarkType)
 	}
 	return strings.Join(append([]string{format}, benchmarkColumns...), ",\n") + ")"
+}
+
+func builderWithOffsetLimit(builder squirrel.SelectBuilder, limit, offset uint64) squirrel.SelectBuilder {
+	if limit > 0 {
+		builder = builder.Limit(limit)
+	}
+	if offset > 0 {
+		builder = builder.Offset(offset)
+	}
+
+	return builder
 }

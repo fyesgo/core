@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Masterminds/squirrel"
 	"github.com/pkg/errors"
 	pb "github.com/sonm-io/core/proto"
 )
@@ -217,6 +218,9 @@ func newSQLiteStorage(tInfo *tablesInfo, numBenchmarks uint64) *sqlStorage {
 		queryRunner:   newSQLiteQueryRunner(tInfo),
 		tablesInfo:    tInfo,
 		formatCb:      formatCb,
+		statementBuilder: func() squirrel.StatementBuilderType {
+			return squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
+		},
 	}
 
 	return store
@@ -301,6 +305,8 @@ func (r *sqliteQueryRunner) Run(conn queryConn, opts *queryOpts) (*sql.Rows, uin
 			countRows.Scan(&count)
 		}
 	}
+
+	fmt.Println(">>>", query)
 
 	rows, err := conn.Query(query, values...)
 	if err != nil {
