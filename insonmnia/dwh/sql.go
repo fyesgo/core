@@ -458,42 +458,38 @@ func (c *sqlStorage) GetMatchingOrders(conn queryConn, r *pb.MatchingOrdersReque
 	return orders, count, nil
 }
 
-func (c *sqlStorage) GetProfiles(conn queryConn, request *pb.ProfilesRequest) ([]*pb.Profile, uint64, error) {
-	var filters []*filter
-	switch request.Role {
+func (c *sqlStorage) GetProfiles(conn queryConn, r *pb.ProfilesRequest) ([]*pb.Profile, uint64, error) {
+	builder := c.statementBuilder().Select("*").From("Profiles")
+	switch r.Role {
 	case pb.ProfileRole_Supplier:
-		filters = append(filters, newFilter("ActiveAsks", gte, 1, "AND"))
+		builder = builder.Where("ActiveAsks >= 1")
 	case pb.ProfileRole_Consumer:
-		filters = append(filters, newFilter("ActiveBids", gte, 1, "AND"))
+		builder = builder.Where("ActiveBids >= 1")
 	}
-	filters = append(filters, newFilter("IdentityLevel", gte, request.IdentityLevel, "AND"))
-	if len(request.Country) > 0 {
-		filters = append(filters, newFilter("Country", eq, request.Country, "AND"))
+	builder = builder.Where("IdentityLevel >= ?", r.IdentityLevel)
+	if len(r.Country) > 0 {
+		builder = builder.Where("Country = ?", r.Country)
 	}
-	if len(request.Name) > 0 {
-		filters = append(filters, newFilter("Name", "LIKE", request.Name, "AND"))
+	if len(r.Name) > 0 {
+		builder = builder.Where("Name LIKE ", r.Name)
 	}
 
-	opts := &queryOpts{
-		table:     "Profiles",
-		filters:   filters,
-		sortings:  c.filterSortings(request.Sortings, c.tablesInfo.ProfileColumnsSet),
-		offset:    request.Offset,
-		limit:     request.Limit,
-		withCount: request.WithCount,
-	}
-	if request.BlacklistQuery != nil && request.BlacklistQuery.OwnerID != nil {
+	builder = builderWithSortings(builder, r.Sortings)
+	query, args, _ := builderWithOffsetLimit(builder, r.Limit, r.Offset).ToSql()
+	rows, count, err := runQuery(conn, strings.Join(c.tablesInfo.DealColumns, ", "), r.WithCount, query, args...)
+
+	if r.BlacklistQuery != nil && r.BlacklistQuery.OwnerID != nil {
 		opts.selectAs = "AS p"
-		switch request.BlacklistQuery.Option {
+		switch r.BlacklistQuery.Option {
 		case pb.BlacklistOption_WithoutMatching:
 			opts.customFilter = &customFilter{
 				clause: c.commands.profileNotInBlacklist,
-				values: []interface{}{request.BlacklistQuery.OwnerID.Unwrap().Hex()},
+				values: []interface{}{r.BlacklistQuery.OwnerID.Unwrap().Hex()},
 			}
 		case pb.BlacklistOption_OnlyMatching:
 			opts.customFilter = &customFilter{
 				clause: c.commands.profileInBlacklist,
-				values: []interface{}{request.BlacklistQuery.OwnerID.Unwrap().Hex()},
+				values: []interface{}{r.BlacklistQuery.OwnerID.Unwrap().Hex()},
 			}
 		}
 	}
@@ -516,8 +512,8 @@ func (c *sqlStorage) GetProfiles(conn queryConn, request *pb.ProfilesRequest) ([
 		return nil, 0, errors.Wrap(err, "rows error")
 	}
 
-	if request.BlacklistQuery != nil && request.BlacklistQuery.Option == pb.BlacklistOption_IncludeAndMark {
-		blacklistReply, err := c.GetBlacklist(conn, &pb.BlacklistRequest{OwnerID: request.BlacklistQuery.OwnerID})
+	if r.BlacklistQuery != nil && r.BlacklistQuery.Option == pb.BlacklistOption_IncludeAndMark {
+		blacklistReply, err := c.GetBlacklist(conn, &pb.BlacklistRequest{OwnerID: r.BlacklistQuery.OwnerID})
 		if err != nil {
 			return nil, 0, errors.Wrap(err, "failed to")
 		}
