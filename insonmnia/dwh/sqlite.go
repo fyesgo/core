@@ -37,7 +37,6 @@ func newSQLiteStorage(tInfo *tablesInfo, numBenchmarks uint64) *sqlStorage {
 
 	store := &sqlStorage{
 		commands: &sqlCommands{
-			deleteOrder:                `DELETE FROM Orders WHERE Id=?`,
 			insertDealChangeRequest:    `INSERT INTO DealChangeRequests VALUES (?, ?, ?, ?, ?, ?, ?)`,
 			selectDealChangeRequests:   `SELECT * FROM DealChangeRequests WHERE DealID=? AND RequestType=? AND Status=?`,
 			deleteDealChangeRequest:    `DELETE FROM DealChangeRequests WHERE Id=?`,

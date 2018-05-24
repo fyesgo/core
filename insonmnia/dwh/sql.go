@@ -314,7 +314,8 @@ func (c *sqlStorage) UpdateOrders(conn queryConn, profile *pb.Profile) error {
 }
 
 func (c *sqlStorage) DeleteOrder(conn queryConn, orderID *big.Int) error {
-	_, err := conn.Exec(c.commands.deleteOrder, orderID.String())
+	query, args, _ := c.builder().Delete("Orders").Where("Id = ?", orderID.String()).ToSql()
+	_, err := conn.Exec(query, args...)
 	return err
 }
 
@@ -1329,7 +1330,6 @@ func (c *sqlStorage) filterSortings(sortings []*pb.SortingOption, columns map[st
 }
 
 type sqlCommands struct {
-	deleteOrder                string
 	insertDealChangeRequest    string
 	updateDealChangeRequest    string
 	deleteDealChangeRequest    string
