@@ -1,0 +1,5 @@
+*.sol linguist-language=Solidity
+api/* linguist-detectable=false
+api/* linguist-generated
+app/* linguist-detectable=false
+tests/* linguist-detectable=false
