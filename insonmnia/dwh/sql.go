@@ -673,19 +673,23 @@ func (c *sqlStorage) UpdateDealConditionEndTime(conn queryConn, dealConditionID,
 	return err
 }
 
-func (c *sqlStorage) InsertWorker(conn queryConn, masterID, slaveID string) error {
-	query, args, err := c.builder().Insert("Workers").Values(masterID, slaveID, false).ToSql()
+func (c *sqlStorage) InsertWorker(conn queryConn, masterID, workerID string) error {
+	query, args, err := c.builder().Insert("Workers").Values(masterID, workerID, false).ToSql()
 	_, err = conn.Exec(query, args...)
 	return err
 }
 
-func (c *sqlStorage) UpdateWorker(conn queryConn, masterID, slaveID string) error {
-	_, err := conn.Exec(c.commands.updateWorker, true, masterID, slaveID)
+func (c *sqlStorage) UpdateWorker(conn queryConn, masterID, workerID string) error {
+	query, args, err := c.builder().Update("Workers").Set("Confirmed", true).Where("MasterID = ?", masterID).
+		Where("WorkerID = ?", workerID).ToSql()
+	_, err = conn.Exec(query, args...)
 	return err
 }
 
-func (c *sqlStorage) DeleteWorker(conn queryConn, masterID, slaveID string) error {
-	_, err := conn.Exec(c.commands.deleteWorker, masterID, slaveID)
+func (c *sqlStorage) DeleteWorker(conn queryConn, masterID, workerID string) error {
+	query, args, err := c.builder().Delete("Workers").Where("MasterID = ?", masterID).
+		Where("WorkerID = ?", workerID).ToSql()
+	_, err = conn.Exec(query, args...)
 	return err
 }
 
@@ -1341,9 +1345,6 @@ func (c *sqlStorage) filterSortings(sortings []*pb.SortingOption, columns map[st
 }
 
 type sqlCommands struct {
-	updateWorker          string
-	deleteWorker          string
-	selectBlacklists      string
 	deleteBlacklistEntry  string
 	insertValidator       string
 	updateValidator       string
