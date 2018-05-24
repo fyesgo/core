@@ -459,7 +459,7 @@ func (c *sqlStorage) GetMatchingOrders(conn queryConn, r *pb.MatchingOrdersReque
 }
 
 func (c *sqlStorage) GetProfiles(conn queryConn, r *pb.ProfilesRequest) ([]*pb.Profile, uint64, error) {
-	builder := c.statementBuilder().Select("*").From("Profiles")
+	builder := c.statementBuilder().Select("*").From("Profiles AS p")
 	switch r.Role {
 	case pb.ProfileRole_Supplier:
 		builder = builder.Where("ActiveAsks >= 1")
@@ -471,30 +471,31 @@ func (c *sqlStorage) GetProfiles(conn queryConn, r *pb.ProfilesRequest) ([]*pb.P
 		builder = builder.Where("Country = ?", r.Country)
 	}
 	if len(r.Name) > 0 {
-		builder = builder.Where("Name LIKE ", r.Name)
+		builder = builder.Where("Name LIKE ?", r.Name)
 	}
 
-	builder = builderWithSortings(builder, r.Sortings)
-	query, args, _ := builderWithOffsetLimit(builder, r.Limit, r.Offset).ToSql()
-	rows, count, err := runQuery(conn, strings.Join(c.tablesInfo.DealColumns, ", "), r.WithCount, query, args...)
-
-	if r.BlacklistQuery != nil && r.BlacklistQuery.OwnerID != nil {
-		opts.selectAs = "AS p"
-		switch r.BlacklistQuery.Option {
-		case pb.BlacklistOption_WithoutMatching:
-			opts.customFilter = &customFilter{
-				clause: c.commands.profileNotInBlacklist,
-				values: []interface{}{r.BlacklistQuery.OwnerID.Unwrap().Hex()},
-			}
-		case pb.BlacklistOption_OnlyMatching:
-			opts.customFilter = &customFilter{
-				clause: c.commands.profileInBlacklist,
-				values: []interface{}{r.BlacklistQuery.OwnerID.Unwrap().Hex()},
+	if r.BlacklistQuery != nil && !r.BlacklistQuery.OwnerID.IsZero() {
+		ownerBuilder := c.statementBuilder().Select("AddeeID").From("Blacklists").
+			Where("AdderID = %s").Where("AddeeID = p.UserID")
+		ownerQuery, _, _ := ownerBuilder.ToSql()
+		ownerQuery = fmt.Sprintf(ownerQuery, r.BlacklistQuery.OwnerID.Unwrap().Hex())
+		if r.BlacklistQuery != nil && r.BlacklistQuery.OwnerID != nil {
+			switch r.BlacklistQuery.Option {
+			case pb.BlacklistOption_WithoutMatching:
+				builder = builder.Where(fmt.Sprintf("UserID NOT IN (%s)", ownerQuery))
+			case pb.BlacklistOption_OnlyMatching:
+				builder = builder.Where(fmt.Sprintf("UserID IN (%s)", ownerQuery))
 			}
 		}
 	}
 
-	rows, count, err := c.queryRunner.Run(conn, opts)
+	builder = builderWithSortings(builder, r.Sortings)
+	query, args, _ := builderWithOffsetLimit(builder, r.Limit, r.Offset).ToSql()
+
+	fmt.Println("..", r.IdentityLevel)
+	fmt.Println(">>>>>>>>>>>", query)
+
+	rows, count, err := runQuery(conn, "*", r.WithCount, query, args...)
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "failed to run query")
 	}
