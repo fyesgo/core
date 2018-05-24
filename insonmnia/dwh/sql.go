@@ -473,12 +473,10 @@ func (c *sqlStorage) GetProfiles(conn queryConn, r *pb.ProfilesRequest) ([]*pb.P
 	if len(r.Name) > 0 {
 		builder = builder.Where("Name LIKE ?", r.Name)
 	}
-
 	if r.BlacklistQuery != nil && !r.BlacklistQuery.OwnerID.IsZero() {
 		ownerBuilder := c.statementBuilder().Select("AddeeID").From("Blacklists").
-			Where("AdderID = %s").Where("AddeeID = p.UserID")
+			Where("AdderID = ?", r.BlacklistQuery.OwnerID.Unwrap().Hex()).Where("AddeeID = p.UserID")
 		ownerQuery, _, _ := ownerBuilder.ToSql()
-		ownerQuery = fmt.Sprintf(ownerQuery, r.BlacklistQuery.OwnerID.Unwrap().Hex())
 		if r.BlacklistQuery != nil && r.BlacklistQuery.OwnerID != nil {
 			switch r.BlacklistQuery.Option {
 			case pb.BlacklistOption_WithoutMatching:
@@ -487,13 +485,14 @@ func (c *sqlStorage) GetProfiles(conn queryConn, r *pb.ProfilesRequest) ([]*pb.P
 				builder = builder.Where(fmt.Sprintf("UserID IN (%s)", ownerQuery))
 			}
 		}
-	}
 
+	}
 	builder = builderWithSortings(builder, r.Sortings)
 	query, args, _ := builderWithOffsetLimit(builder, r.Limit, r.Offset).ToSql()
 
-	fmt.Println("..", r.IdentityLevel)
-	fmt.Println(">>>>>>>>>>>", query)
+	if r.BlacklistQuery != nil && !r.BlacklistQuery.OwnerID.IsZero() {
+		args = append(args, r.BlacklistQuery.OwnerID.Unwrap().Hex())
+	}
 
 	rows, count, err := runQuery(conn, "*", r.WithCount, query, args...)
 	if err != nil {
