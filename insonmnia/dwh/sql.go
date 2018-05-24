@@ -745,12 +745,15 @@ func (c *sqlStorage) GetBlacklist(conn queryConn, r *pb.BlacklistRequest) (*pb.B
 }
 
 func (c *sqlStorage) InsertValidator(conn queryConn, validator *pb.Validator) error {
-	_, err := conn.Exec(c.commands.insertValidator, validator.Id.Unwrap().Hex(), validator.Level)
+	query, args, _ := c.builder().Insert("Validators").Values(validator.Id.Unwrap().Hex(), validator.Level).ToSql()
+	_, err := conn.Exec(query, args...)
 	return err
 }
 
 func (c *sqlStorage) UpdateValidator(conn queryConn, validator *pb.Validator) error {
-	_, err := conn.Exec(c.commands.updateValidator, validator.Level, validator.Id.Unwrap().Hex())
+	query, args, _ := c.builder().Update("Validators").Set("Level", validator.Level).
+		Where("Id = ?", validator.Id.Unwrap().Hex()).ToSql()
+	_, err := conn.Exec(query, args...)
 	return err
 }
 
@@ -1347,9 +1350,6 @@ func (c *sqlStorage) filterSortings(sortings []*pb.SortingOption, columns map[st
 }
 
 type sqlCommands struct {
-	deleteBlacklistEntry  string
-	insertValidator       string
-	updateValidator       string
 	insertCertificate     string
 	selectCertificates    string
 	insertProfileUserID   string

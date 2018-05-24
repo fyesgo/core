@@ -32,9 +32,6 @@ func newPostgresStorage(tInfo *tablesInfo, numBenchmarks uint64) *sqlStorage {
 
 	commands := &sqlStorage{
 		commands: &sqlCommands{
-			deleteBlacklistEntry:  `DELETE FROM Blacklists WHERE AdderID = $1 AND AddeeID = $2`,
-			insertValidator:       `INSERT INTO Validators VALUES ($1, $2)`,
-			updateValidator:       `UPDATE Validators SET Level = $1 WHERE Id = $2`,
 			insertCertificate:     `INSERT INTO Certificates VALUES ($1, $2, $3, $4, $5)`,
 			selectCertificates:    `SELECT * FROM Certificates WHERE OwnerID = $1`,
 			insertProfileUserID:   `INSERT INTO Profiles (UserID, IdentityLevel, Name, Country, IsCorporation, IsProfessional, Certificates, ActiveAsks, ActiveBids ) VALUES ($1, 0, '', '', FALSE, FALSE, $2, $3, $4) ON CONFLICT (UserID) DO NOTHING`,
