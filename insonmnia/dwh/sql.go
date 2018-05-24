@@ -141,7 +141,8 @@ func (c *sqlStorage) UpdateDealPayout(conn queryConn, dealID, payout *big.Int, b
 }
 
 func (c *sqlStorage) DeleteDeal(conn queryConn, dealID *big.Int) error {
-	_, err := conn.Exec(c.commands.deleteDeal, dealID.String())
+	query, args, _ := c.builder().Delete("Deals").Where("Id = ?", dealID.String()).ToSql()
+	_, err := conn.Exec(query, args...)
 	return err
 }
 
@@ -267,7 +268,7 @@ func (c *sqlStorage) GetDealConditions(conn queryConn, r *pb.DealConditionsReque
 }
 
 func (c *sqlStorage) InsertOrder(conn queryConn, order *pb.DWHOrder) error {
-	allColumns := []interface{}{
+	values := []interface{}{
 		order.GetOrder().Id.Unwrap().String(),
 		order.CreatedTS.Seconds,
 		order.GetOrder().DealID.Unwrap().String(),
@@ -288,10 +289,14 @@ func (c *sqlStorage) InsertOrder(conn queryConn, order *pb.DWHOrder) error {
 		[]byte(order.CreatorCertificates),
 	}
 	for benchID := uint64(0); benchID < c.numBenchmarks; benchID++ {
-		allColumns = append(allColumns, order.GetOrder().Benchmarks.Values[benchID])
+		values = append(values, order.GetOrder().Benchmarks.Values[benchID])
 	}
 
-	_, err := conn.Exec(c.commands.insertOrder, allColumns...)
+	query, args, _ := c.builder().Insert("Orders").
+		Columns(c.tablesInfo.OrderColumns...).
+		Values(values...).
+		ToSql()
+	_, err := conn.Exec(query, args...)
 	return err
 }
 
@@ -1326,8 +1331,6 @@ func (c *sqlStorage) filterSortings(sortings []*pb.SortingOption, columns map[st
 }
 
 type sqlCommands struct {
-	deleteDeal                 string
-	insertOrder                string
 	updateOrderStatus          string
 	updateOrders               string
 	deleteOrder                string

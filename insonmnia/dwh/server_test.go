@@ -1144,6 +1144,11 @@ func setupTestDB(w *DWH) error {
 		SupplierCertificates, ConsumerCertificates, ActiveChangeRequest, Benchmark0, Benchmark1, Benchmark2,
 		Benchmark3, Benchmark4, Benchmark5, Benchmark6, Benchmark7, Benchmark8, Benchmark9, Benchmark10, Benchmark11)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	insertOrder := `INSERT INTO Orders(Id, CreatedTS, DealID, Type, Status, AuthorID, CounterpartyID, Duration,
+		Price, Netflags, IdentityLevel, Blacklist, Tag, FrozenSum, CreatorIdentityLevel, CreatorName, CreatorCountry,
+		CreatorCertificates, Benchmark0, Benchmark1, Benchmark2, Benchmark3, Benchmark4, Benchmark5, Benchmark6,
+		Benchmark7, Benchmark8, Benchmark9, Benchmark10, Benchmark11) VALUES
+		(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	for i := 0; i < 10; i++ {
 		_, err := w.db.Exec(
 			insertDeal,
@@ -1185,7 +1190,7 @@ func setupTestDB(w *DWH) error {
 		}
 
 		_, err = w.db.Exec(
-			w.storage.(*sqlStorage).commands.insertOrder,
+			insertOrder,
 			fmt.Sprintf("2020%d", i),
 			12345, // CreatedTS
 			fmt.Sprintf("1010%d", i),
@@ -1222,7 +1227,7 @@ func setupTestDB(w *DWH) error {
 		}
 
 		_, err = w.db.Exec(
-			w.storage.(*sqlStorage).commands.insertOrder,
+			insertOrder,
 			fmt.Sprintf("3030%d", i),
 			12345, // CreatedTS
 			fmt.Sprintf("1010%d", i),
