@@ -584,7 +584,11 @@ func (c *sqlStorage) GetDealChangeRequests(conn queryConn, changeRequest *pb.Dea
 }
 
 func (c *sqlStorage) GetDealChangeRequestsByID(conn queryConn, changeRequestID *big.Int) ([]*pb.DealChangeRequest, error) {
-	rows, err := conn.Query(c.commands.selectDealChangeRequestsByID, changeRequestID.String())
+	query, args, _ := c.builder().Select(c.tablesInfo.DealChangeRequestColumns...).
+		From("DealChangeRequests").
+		Where("DealID = ?", changeRequestID.String()).
+		ToSql()
+	rows, err := conn.Query(query, args...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to selectDealChangeRequests")
 	}
@@ -1313,7 +1317,6 @@ type sqlCommands struct {
 	updateOrderStatus            string
 	updateOrders                 string
 	deleteOrder                  string
-	selectOrderByID              string
 	insertDealChangeRequest      string
 	updateDealChangeRequest      string
 	deleteDealChangeRequest      string
@@ -1430,7 +1433,7 @@ func (c *sqlSetupCommands) setupTables(db *sql.DB) error {
 
 func (c *sqlSetupCommands) createIndices(db *sql.DB) error {
 	var err error
-	for column := range c.tablesInfo.DealColumnsSet {
+	for _, column := range c.tablesInfo.DealColumns {
 		if err = c.createIndex(db, c.createIndexCmd, "Deals", column); err != nil {
 			return err
 		}
@@ -1440,12 +1443,12 @@ func (c *sqlSetupCommands) createIndices(db *sql.DB) error {
 			return err
 		}
 	}
-	for column := range c.tablesInfo.DealConditionColumnsSet {
+	for _, column := range c.tablesInfo.DealConditionColumns {
 		if err = c.createIndex(db, c.createIndexCmd, "DealConditions", column); err != nil {
 			return err
 		}
 	}
-	for column := range c.tablesInfo.OrderColumnsSet {
+	for _, column := range c.tablesInfo.OrderColumns {
 		if err = c.createIndex(db, c.createIndexCmd, "Orders", column); err != nil {
 			return err
 		}
@@ -1466,7 +1469,7 @@ func (c *sqlSetupCommands) createIndices(db *sql.DB) error {
 	if err = c.createIndex(db, c.createIndexCmd, "Certificates", "OwnerID"); err != nil {
 		return err
 	}
-	for column := range c.tablesInfo.ProfileColumnsSet {
+	for _, column := range c.tablesInfo.ProfileColumns {
 		if err = c.createIndex(db, c.createIndexCmd, "Profiles", column); err != nil {
 			return err
 		}
@@ -1494,14 +1497,13 @@ type formatArg func(argID uint64, lastArg bool) string
 
 // tablesInfo is used to get static column names for tables with variable columns set (i.e., with benchmarks).
 type tablesInfo struct {
-	DealColumns             []string
-	DealColumnsSet          map[string]bool
-	NumDealColumns          uint64
-	OrderColumns            []string
-	OrderColumnsSet         map[string]bool
-	NumOrderColumns         uint64
-	ProfileColumnsSet       map[string]bool
-	DealConditionColumnsSet map[string]bool
+	DealColumns              []string
+	NumDealColumns           uint64
+	OrderColumns             []string
+	NumOrderColumns          uint64
+	DealConditionColumns     []string
+	DealChangeRequestColumns []string
+	ProfileColumns           []string
 }
 
 func newTablesInfo(numBenchmarks uint64) *tablesInfo {
@@ -1547,6 +1549,15 @@ func newTablesInfo(numBenchmarks uint64) *tablesInfo {
 		"CreatorCountry",
 		"CreatorCertificates",
 	}
+	dealChangeRequestColumns := []string{
+		"Id",
+		"CreatedTS",
+		"RequestType",
+		"Duration",
+		"Price",
+		"Status",
+		"DealID",
+	}
 	dealConditionColumns := []string{
 		"Id",
 		"SupplierID",
@@ -1570,20 +1581,17 @@ func newTablesInfo(numBenchmarks uint64) *tablesInfo {
 		"Certificates",
 	}
 	out := &tablesInfo{
-		DealColumns:             dealColumns,
-		DealColumnsSet:          stringSliceToSet(dealColumns),
-		NumDealColumns:          uint64(len(dealColumns)),
-		OrderColumns:            orderColumns,
-		OrderColumnsSet:         stringSliceToSet(orderColumns),
-		NumOrderColumns:         uint64(len(orderColumns)),
-		DealConditionColumnsSet: stringSliceToSet(dealConditionColumns),
-		ProfileColumnsSet:       stringSliceToSet(profileColumns),
+		DealColumns:              dealColumns,
+		NumDealColumns:           uint64(len(dealColumns)),
+		OrderColumns:             orderColumns,
+		NumOrderColumns:          uint64(len(orderColumns)),
+		DealChangeRequestColumns: dealChangeRequestColumns,
+		DealConditionColumns:     dealConditionColumns,
+		ProfileColumns:           profileColumns,
 	}
 	for benchmarkID := uint64(0); benchmarkID < numBenchmarks; benchmarkID++ {
 		out.DealColumns = append(out.DealColumns, getBenchmarkColumn(uint64(benchmarkID)))
-		out.DealColumnsSet[getBenchmarkColumn(uint64(benchmarkID))] = true
 		out.OrderColumns = append(out.OrderColumns, getBenchmarkColumn(uint64(benchmarkID)))
-		out.OrderColumnsSet[getBenchmarkColumn(uint64(benchmarkID))] = true
 	}
 
 	return out
@@ -1621,10 +1629,6 @@ func makeInsertOrderQuery(format string, formatCb formatArg, numBenchmarks uint6
 		}
 	}
 	return fmt.Sprintf(format, strings.Join(tInfo.OrderColumns, ", "), orderPlaceholders)
-}
-
-func makeSelectOrderByIDQuery(format string, tInfo *tablesInfo) string {
-	return fmt.Sprintf(format, strings.Join(tInfo.OrderColumns, ", "))
 }
 
 func makeTableWithBenchmarks(format, benchmarkType string) string {
