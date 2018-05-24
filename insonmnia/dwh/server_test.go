@@ -48,8 +48,8 @@ func TestMain(m *testing.M) {
 
 	retCode := m.Run()
 	globalDWH.db.Close()
-	//os.Remove(testDBPath)
-	//os.Remove(testMonitorDBPath)
+	os.Remove(testDBPath)
+	os.Remove(testMonitorDBPath)
 	os.Exit(retCode)
 }
 
